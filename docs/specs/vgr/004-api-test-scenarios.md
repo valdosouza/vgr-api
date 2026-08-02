@@ -31,9 +31,18 @@
 
 **Reward**
 - [ ] Should create Reward successfully when offer is one of money, perk, reciprocity, or none
+- [ ] Should reject Reward creation when the Reporter's AnonymityMode is anonymous (decision 33)
 - [ ] Should reject allocate() when the target Report is not yet Resolved
 - [ ] Should reject allocate() when the caller is not the Report's reporterId (decision 30)
+- [ ] Should split the reward evenly across all RewardClaims when allocate() is called with more than one claimId without a custom split (CC art. 860, decision 30)
 - [ ] Should emit RewardAllocated when allocate() succeeds
+- [ ] Should reject revoke() once any qualifying HelpOffer already exists for the Report (CC art. 856, decision 30)
+- [ ] Should allow revoke() successfully when no qualifying HelpOffer exists yet
+
+**UserAccount**
+- [ ] Should complete registration successfully when consent is recorded and Jurisdiction defaults to BR (decision 8, 24)
+- [ ] Should reject registration when consent is not recorded
+- [ ] Should upsert (not duplicate) the UserAccount when the same LoginProvider identity authenticates twice (decision 31)
 
 **UserIdentity**
 - [ ] Should allow Role transition from none to reporter or helper
@@ -79,7 +88,14 @@
 - [ ] Should fail when given a Sighting for a Report that has no existing DirectionEstimate
 - [ ] Should carry no state between executions
 
-### 1.4 Domain Events
+### 1.4 Retention Job
+
+**Child-tagged Report data retention (decision 25)**
+- [ ] Should schedule deletion of a Child-tagged Report's sensitive fields exactly 90 days after ReportResolved
+- [ ] Should leave a non-Child-tagged Report's data untouched by the retention job
+- [ ] Should not delete data before the 90-day window has elapsed, verified with a mocked clock
+
+### 1.5 Domain Events
 
 - [ ] Should contain reportId, category, position, and submittedAt after ReportSubmitted is emitted
 - [ ] Should contain reportId and resolvedAt after ReportResolved is emitted
@@ -132,6 +148,11 @@
 - [ ] Should execute AllocateReward → Reward updated → RewardAllocated emitted → persisted, only when Report is Resolved and caller is the Reporter
 - [ ] Should rollback fully without leaving inconsistent state if persistence fails mid-allocation
 
+**AuthenticateWithProvider → UserAccountRepository**
+- [ ] Should execute AuthenticateWithProvider → provider token verified → UserAccount upserted → UserAuthenticated emitted → JWT issued, for each of Google, Apple, Facebook
+- [ ] Should reject before any persistence when the provider token fails verification
+- [ ] Should execute the OTP variant → code verified against a non-expired, unused record → JWT issued
+
 ### 2.3 External Integrations
 
 > No external integrations are mapped in `002-context-map.md` for the api project at MVP scope — Geolocation Primitives and the Payment/Perk Provider are stubbed/future (see 001-problem-space.md notes). Marked N/A pending those decisions.
@@ -170,6 +191,16 @@
   - When: `POST /api/rewards/:id/allocate` is called by the Reporter with a subset of claimIds
   - Then: response is 200; RewardAllocated is emitted with the chosen claimIds
 
+- [ ] **Should issue a JWT when a user authenticates with Google, Apple, or Facebook**
+  - Given: a valid provider token obtained from the client SDK
+  - When: `POST /auth/login` is called with `{ provider, token }`
+  - Then: response is 200 with `{ jwt }`; UserAuthenticated is emitted
+
+- [ ] **Should issue a JWT when a user completes phone/WhatsApp OTP login**
+  - Given: an OTP code was requested via `POST /auth/login/otp/request`
+  - When: `POST /auth/login/otp/verify` is called with the correct, non-expired code
+  - Then: response is 200 with `{ jwt }`
+
 ### 3.2 Alternative and Error Flows
 
 - [ ] Should return 403 when a Helper who is also the Report's Reporter attempts to submit a HelpOffer on their own Report
@@ -177,6 +208,10 @@
 - [ ] Should return 404 with the project-standard message when a Report id does not exist
 - [ ] Should return 403 when a non-Reporter caller attempts to allocate a Reward
 - [ ] Should return 409 when attempting to resolve() a Report that is already Resolved
+- [ ] Should return 401 when `/auth/login` is called with an invalid or expired provider token
+- [ ] Should return 401 when the OTP code is wrong, expired, or already used
+- [ ] Should return 422 when a non-registered (anonymous) Reporter attempts `POST /api/rewards` to offer a Reward (decision 33)
+- [ ] Should return 409 when attempting to revoke() a Reward after a qualifying HelpOffer already exists (decision 30)
 
 ### 3.3 Security Scenarios
 
@@ -185,6 +220,8 @@
 - [ ] Should exclude AccountabilityLogEntry fields (IP, metadata) from every API response, error payload, and emitted event
 - [ ] Should prevent a Helper from accessing or modifying a HelpOffer belonging to another Helper
 - [ ] Should apply Brazilian jurisdiction rules regardless of the request's originating location/IP (decision 24) — no geo-adaptive behavior branch exists
+- [ ] Should rate-limit OTP request attempts per phone number to prevent SMS/WhatsApp abuse
+- [ ] Should never log or return the raw OTP code in any response, error, or log line other than the delivery channel itself
 
 ## Save
 
