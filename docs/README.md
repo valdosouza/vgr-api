@@ -10,6 +10,7 @@ Index of project technical documentation for **VGR API**. Use the links below to
 | [**ARCHITECTURE.md**](./adr/ARCHITECTURE.md) | Architecture, folder organization, and code patterns for the project. | **Mandatory** |
 | [**TESTS.md**](./adr/TESTS.md) | Testing strategies, patterns, and execution commands. | **Mandatory** |
 | [**risk-config.md**](./feature/risk-config.md) | RiskTier-per-Category registry, admin-managed (decision 46). | Optional |
+| [**access-control.md**](./feature/access-control.md) | Per-user permission model, dynamic menu and per-endpoint enforcement (decisions 68-75). | Optional |
 
 ## Recommended Reading Order
 

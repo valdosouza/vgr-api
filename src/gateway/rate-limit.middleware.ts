@@ -11,3 +11,15 @@ export const rateLimitMiddleware = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 })
+
+/**
+ * Stricter limit for /auth (login + password recovery): these endpoints are
+ * brute-force targets and were previously unprotected — gap flagged in
+ * docs/feature/auth.md, closed in phase 2 of the admin-controls plan.
+ */
+export const authRateLimitMiddleware = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+})

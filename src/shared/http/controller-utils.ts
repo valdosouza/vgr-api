@@ -1,7 +1,7 @@
 import { Response, Request } from 'express'
 import { z } from 'zod'
 import { HttpError, FieldError } from '@shared/errors/http-error'
-import { ErrorCodes } from '@shared/errors/error-codes'
+import { ErrorCodes, FieldErrorCodes } from '@shared/errors/error-codes'
 import logger from '@shared/logger/logger'
 
 /**
@@ -18,8 +18,9 @@ export function handleError(res: Response, err: unknown, ctx: string): void {
   if (err instanceof HttpError) {
     res.status(err.statusCode).json({
       error: err.message,
-      ...(err.code ? { code: err.code } : {}),
+      code: err.code,
       ...(err.fields ? { fields: err.fields } : {}),
+      ...(err.params ? { params: err.params } : {}),
     })
     return
   }
@@ -38,11 +39,36 @@ export function parseId(req: Request, res: Response): number | null {
   return id
 }
 
-/** Converts Zod issues into the per-field format. */
+/** Stable per-field code + params derived from the Zod issue (decision 83)
+ *  — the client's translation key for form errors. */
+function fieldCodeOf(issue: z.ZodIssue): { code: string; params?: Record<string, string> } {
+  switch (issue.code) {
+    case 'invalid_type':
+      return issue.received === 'undefined'
+        ? { code: FieldErrorCodes.REQUIRED }
+        : { code: FieldErrorCodes.INVALID_VALUE }
+    case 'too_small':
+      return { code: FieldErrorCodes.TOO_SHORT, params: { min: String(issue.minimum) } }
+    case 'too_big':
+      return { code: FieldErrorCodes.TOO_LONG, params: { max: String(issue.maximum) } }
+    case 'invalid_string':
+      return issue.validation === 'email'
+        ? { code: FieldErrorCodes.INVALID_EMAIL }
+        : { code: FieldErrorCodes.INVALID_FORMAT }
+    case 'invalid_enum_value':
+      return { code: FieldErrorCodes.INVALID_OPTION }
+    default:
+      return { code: FieldErrorCodes.INVALID_VALUE }
+  }
+}
+
+/** Converts Zod issues into the per-field format (message = English
+ *  fallback; code/params = translation contract, decision 83). */
 export function zodToFields(error: z.ZodError): FieldError[] {
   return error.issues.map((issue) => ({
     field: issue.path.join('.') || '(body)',
     message: issue.message,
+    ...fieldCodeOf(issue),
   }))
 }
 

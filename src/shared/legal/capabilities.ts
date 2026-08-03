@@ -1,0 +1,81 @@
+/**
+ * Legal capability catalog — the blockable unit of the Legal Gate
+ * (decision 103: the domain verb, `domain.action[.qualifier]`, stable
+ * across refactors and readable by the manager who promotes rules).
+ *
+ * This TS catalog is the ENFORCEMENT source of truth: a key not listed
+ * here is treated as blocked everywhere, sandbox included (decision 103,
+ * guard 1 — a typo must never become a silent allow). The DB mirror
+ * (tb_legal_capability, migration 022) backs the admin UI and the rule
+ * FK; capabilities.catalog.spec.ts asserts the two stay in sync.
+ */
+export const Capabilities = {
+  /** Anonymous reporting with hidden accountability log (decisions 23, 32). */
+  REPORT_ANONYMOUS: 'report.anonymous',
+  /** Publishing a reward promise — CC arts. 854-860 (decisions 1, 30). */
+  REWARD_OFFER: 'reward.offer',
+  /** Monetary reward via the payment rail (decisions 82, 97). */
+  REWARD_MONETARY: 'reward.monetary',
+  /** Deciding condition fulfillment, instructing release/refund (decision 98). */
+  REWARD_MEDIATION: 'reward.mediation',
+  /** Intermediation by a licensed third-party PSP (decisions 81, 91, 100). */
+  REWARD_INTERMEDIATION_DELEGATED: 'reward.intermediation.delegated',
+  /** VGR as intermediary — blocked until BACEN authorization (decisions 81, 99). */
+  REWARD_INTERMEDIATION_OWN: 'reward.intermediation.own',
+  /** Missing-child data retention (decision 25 — LGPD art. 14). */
+  MINOR_DATA_RETENTION: 'minor.data_retention',
+  /** Helper identity disclosure flows (decisions 6, 34, 40). */
+  IDENTITY_DISCLOSURE: 'identity.disclosure',
+  /** Location trails and direction sightings (decisions 7, 22, 26). */
+  LOCATION_TRACKING: 'location.tracking',
+  /** Cross-border personal data transfer (decision 105). */
+  DATA_CROSS_BORDER: 'data.cross_border',
+  /** Panic-button dispatch to responders (decisions 51-52, 62-63). */
+  PANIC_DISPATCH: 'panic.dispatch',
+} as const
+
+export type Capability = (typeof Capabilities)[keyof typeof Capabilities]
+
+const KNOWN = new Set<string>(Object.values(Capabilities))
+
+/** Guard 1 of decision 103: unknown key -> blocked, never allowed. */
+export function isKnownCapability(key: string): key is Capability {
+  return KNOWN.has(key)
+}
+
+/**
+ * Guard 2 of decision 103: a cataloged capability with no caller is debt,
+ * not protection. The domain features that consume the gate (report,
+ * reward, panic dispatch) are still unbuilt — every entry below is awaiting
+ * its consumer. capabilities.catalog.spec.ts asserts that PENDING_WIRING
+ * plus the actually-called capabilities exactly partition the catalog, so
+ * an entry can never silently be neither wired nor declared pending.
+ * When a domain task wires a capability, it MUST remove the entry here —
+ * the spec fails otherwise.
+ */
+export const PENDING_WIRING: ReadonlySet<Capability> = new Set<Capability>([
+  Capabilities.REPORT_ANONYMOUS,
+  Capabilities.REWARD_OFFER,
+  Capabilities.REWARD_MONETARY,
+  Capabilities.REWARD_MEDIATION,
+  Capabilities.REWARD_INTERMEDIATION_DELEGATED,
+  Capabilities.REWARD_INTERMEDIATION_OWN,
+  Capabilities.MINOR_DATA_RETENTION,
+  Capabilities.IDENTITY_DISCLOSURE,
+  Capabilities.LOCATION_TRACKING,
+  Capabilities.DATA_CROSS_BORDER,
+  Capabilities.PANIC_DISPATCH,
+])
+
+/**
+ * Capability dependencies (decision 98): a capability may require another
+ * one allowed in the same jurisdiction. reward.monetary without
+ * reward.mediation would accept reserves the platform cannot release —
+ * third-party money stuck with no exit, the exact state decision 84 exists
+ * to prevent. Enforced on rule promotion (legal-policy service) AND on
+ * gate evaluation (legal-gate), so neither path can create the incoherent
+ * state.
+ */
+export const CAPABILITY_REQUIRES: Readonly<Partial<Record<Capability, Capability>>> = {
+  [Capabilities.REWARD_MONETARY]: Capabilities.REWARD_MEDIATION,
+}

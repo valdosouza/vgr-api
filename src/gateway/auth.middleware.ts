@@ -1,6 +1,8 @@
 import { NextFunction, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import { AuthenticatedUser } from '@shared/types/express'
+import { jwtSecret } from '@shared/config/env'
+import logger from '@shared/logger/logger'
 
 /**
  * Validates the Bearer JWT on /api/* routes.
@@ -18,9 +20,20 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return
   }
 
+  // A missing secret is a server misconfiguration (500), never a token
+  // problem (401) — and never a verify against '' (finding A2).
+  let secret: string
+  try {
+    secret = jwtSecret()
+  } catch (err) {
+    logger.error('JWT_SECRET missing — rejecting all authenticated requests', { err })
+    res.status(500).json({ error: 'Internal error', code: 'INTERNAL' })
+    return
+  }
+
   const token = header.slice('Bearer '.length)
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET ?? '') as AuthenticatedUser
+    const payload = jwt.verify(token, secret) as AuthenticatedUser
     req.user = payload
     next()
   } catch {

@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken'
+import * as aclStore from '@shared/acl/privilege-store'
 import request from 'supertest'
 import app from '../../../app'
 import * as service from '../risk-config.service'
@@ -7,8 +8,11 @@ jest.mock('../risk-config.service')
 
 const mockedService = service as jest.Mocked<typeof service>
 
+jest.mock('@shared/acl/privilege-store')
+const mockedAcl = aclStore as jest.Mocked<typeof aclStore>
+
 function tokenFor(role: string): string {
-  return jwt.sign({ userId: 1, role }, process.env.JWT_SECRET ?? 'test-secret')
+  return jwt.sign({ userId: role === 'admin' ? 1 : 2, role }, process.env.JWT_SECRET ?? 'test-secret')
 }
 
 describe('GET /api/risk-config', () => {
@@ -18,6 +22,7 @@ describe('GET /api/risk-config', () => {
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockedAcl.userHasPrivilege.mockImplementation(async (userId: number) => userId === 1)
   })
 
   it('returns 200 with every configured tier for an admin caller', async () => {
@@ -49,6 +54,7 @@ describe('PUT /api/risk-config/:category', () => {
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockedAcl.userHasPrivilege.mockImplementation(async (userId: number) => userId === 1)
   })
 
   it('returns 200 with the updated tier when an admin makes the request', async () => {

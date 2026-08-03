@@ -1,0 +1,99 @@
+import bcrypt from 'bcryptjs'
+import * as repository from '@modules/auth/admin-account.repository'
+import * as mailer from '@shared/mailer/mailer'
+import { changePassword, recoveryPassword } from '@modules/auth/password-recovery.service'
+import { HttpError } from '@shared/errors/http-error'
+
+jest.mock('@modules/auth/admin-account.repository')
+jest.mock('@shared/mailer/mailer')
+
+const mockedRepository = repository as jest.Mocked<typeof repository>
+const mockedMailer = mailer as jest.Mocked<typeof mailer>
+
+const account = { id: 1, email: 'valdo@vgr.com.br', passwordHash: 'x', active: 'S' as const }
+
+describe('password-recovery.service recoveryPassword', () => {
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedMailer.isMailerConfigured.mockReturnValue(false)
+  })
+
+  it('stores a 6-digit code and emails it for an active account', async () => {
+    mockedRepository.findAdminAccountByEmail.mockResolvedValue(account)
+
+    await recoveryPassword('valdo@vgr.com.br')
+
+    const [id, code] = mockedRepository.setActivationKey.mock.calls[0]
+    expect(id).toBe(1)
+    expect(code).toMatch(/^\d{6}$/)
+    expect(mockedMailer.sendMail).toHaveBeenCalled()
+  })
+
+  it('resolves silently for an unknown email — no user enumeration', async () => {
+    mockedRepository.findAdminAccountByEmail.mockResolvedValue(null)
+
+    await expect(recoveryPassword('unknown@vgr.com.br')).resolves.toBeUndefined()
+    expect(mockedRepository.setActivationKey).not.toHaveBeenCalled()
+    expect(mockedMailer.sendMail).not.toHaveBeenCalled()
+  })
+
+  it('resolves silently for a deactivated account', async () => {
+    mockedRepository.findAdminAccountByEmail.mockResolvedValue({ ...account, active: 'N' })
+
+    await recoveryPassword('valdo@vgr.com.br')
+    expect(mockedRepository.setActivationKey).not.toHaveBeenCalled()
+  })
+
+  it('still stores the code even when the email send fails (code goes to log in dev)', async () => {
+    mockedRepository.findAdminAccountByEmail.mockResolvedValue(account)
+    mockedMailer.sendMail.mockRejectedValue(new Error('smtp down'))
+
+    await expect(recoveryPassword('valdo@vgr.com.br')).resolves.toBeUndefined()
+    expect(mockedRepository.setActivationKey).toHaveBeenCalled()
+  })
+})
+
+describe('password-recovery.service changePassword', () => {
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedRepository.findAdminAccountByEmail.mockResolvedValue(account)
+  })
+
+  it('bcrypt-hashes and stores the new password within the 15-minute window', async () => {
+    mockedRepository.getActivationInfo.mockResolvedValue({ activationKey: '123456', ageMinutes: 5 })
+
+    await changePassword('valdo@vgr.com.br', '123456', 'new-pass')
+
+    const [id, hash] = mockedRepository.updatePassword.mock.calls[0]
+    expect(id).toBe(1)
+    expect(await bcrypt.compare('new-pass', hash)).toBe(true)
+  })
+
+  it('rejects a wrong code with the generic 401', async () => {
+    mockedRepository.getActivationInfo.mockResolvedValue({ activationKey: '123456', ageMinutes: 5 })
+
+    await expect(changePassword('valdo@vgr.com.br', '654321', 'new-pass')).rejects.toThrow(HttpError)
+    expect(mockedRepository.updatePassword).not.toHaveBeenCalled()
+  })
+
+  it('rejects an expired code (older than 15 minutes) with the same generic 401', async () => {
+    mockedRepository.getActivationInfo.mockResolvedValue({ activationKey: '123456', ageMinutes: 16 })
+
+    let expiredError: HttpError | undefined
+    try {
+      await changePassword('valdo@vgr.com.br', '123456', 'new-pass')
+    } catch (err) {
+      expiredError = err as HttpError
+    }
+    expect(expiredError?.statusCode).toBe(401)
+    expect(expiredError?.message).toBe('Invalid or expired code')
+  })
+
+  it('rejects an unknown email with the same generic 401', async () => {
+    mockedRepository.findAdminAccountByEmail.mockResolvedValue(null)
+
+    await expect(changePassword('unknown@vgr.com.br', '123456', 'new-pass')).rejects.toMatchObject({
+      statusCode: 401,
+    })
+  })
+})

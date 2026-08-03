@@ -1,11 +1,15 @@
 import app from './app'
 import logger from '@shared/logger/logger'
 import { runMigrations } from './migrations/runner'
+import { assertRequiredEnv } from '@shared/config/env'
 
 const PORT = process.env.PORT ?? 3000
 
 async function bootstrap() {
   try {
+    // Fail fast on missing security-critical env (finding A2) — a
+    // misconfigured production install must not come up half-secure.
+    assertRequiredEnv()
     logger.info('Starting migrations...')
     await runMigrations()
     logger.info('Migrations completed. Starting server...')

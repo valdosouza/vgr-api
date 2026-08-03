@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken'
+import * as aclStore from '@shared/acl/privilege-store'
 import request from 'supertest'
 import app from '../../../app'
 import * as service from '../category-form-schema.service'
@@ -7,8 +8,11 @@ jest.mock('../category-form-schema.service')
 
 const mockedService = service as jest.Mocked<typeof service>
 
+jest.mock('@shared/acl/privilege-store')
+const mockedAcl = aclStore as jest.Mocked<typeof aclStore>
+
 function tokenFor(role: string): string {
-  return jwt.sign({ userId: 1, role }, process.env.JWT_SECRET ?? 'test-secret')
+  return jwt.sign({ userId: role === 'admin' ? 1 : 2, role }, process.env.JWT_SECRET ?? 'test-secret')
 }
 
 describe('GET /api/category-forms', () => {
@@ -18,6 +22,7 @@ describe('GET /api/category-forms', () => {
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockedAcl.userHasPrivilege.mockImplementation(async (userId: number) => userId === 1)
   })
 
   it('returns 200 with every configured schema for an admin caller', async () => {
@@ -51,6 +56,7 @@ describe('PUT /api/category-forms/:category', () => {
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockedAcl.userHasPrivilege.mockImplementation(async (userId: number) => userId === 1)
   })
 
   it('returns 200 with the saved schema when an admin makes the request', async () => {

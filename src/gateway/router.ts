@@ -4,6 +4,12 @@ import riskConfigRoutes from '@modules/risk-config/risk-config.routes'
 import responderPoolRoutes from '@modules/panic/responder-pool.routes'
 import dualControlAccessRoutes from '@modules/admin-access/dual-control.routes'
 import monetizationConfigRoutes from '@modules/monetization-config/fee-rule.routes'
+import coreRoutes from '@modules/core/core.routes'
+import legalPolicyRoutes from '@modules/legal-policy/legal-policy.routes'
+import privilegeRoutes from '@modules/privileges/privilege.routes'
+import interfaceRoutes from '@modules/interfaces/interface.routes'
+import systemModuleRoutes from '@modules/system-modules/system-module.routes'
+import userRoutes from '@modules/users/user.routes'
 
 /**
  * Central router — every module is mounted here at /api/<module>,
@@ -20,5 +26,16 @@ router.use('/category-forms', categoryFormsRoutes)
 router.use('/panic/responder-pool', responderPoolRoutes)
 router.use('/dual-control-access', dualControlAccessRoutes)
 router.use('/monetization-config', monetizationConfigRoutes)
+
+// Access-control modules (decisions 68-75) + session/menu endpoints.
+router.use('/core', coreRoutes)
+router.use('/privileges', privilegeRoutes)
+router.use('/interfaces', interfaceRoutes)
+router.use('/system-modules', systemModuleRoutes)
+router.use('/users', userRoutes)
+
+// Legal Gate administration (decisions 103-109) — the gate itself lives in
+// @shared/legal and is consumed via requireCapability / assertCapability.
+router.use('/legal-policy', legalPolicyRoutes)
 
 export default router

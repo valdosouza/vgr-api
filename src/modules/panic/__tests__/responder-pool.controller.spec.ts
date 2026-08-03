@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken'
+import * as aclStore from '@shared/acl/privilege-store'
 import request from 'supertest'
 import app from '../../../app'
 import * as service from '../responder-pool.service'
@@ -6,6 +7,9 @@ import * as service from '../responder-pool.service'
 jest.mock('../responder-pool.service')
 
 const mockedService = service as jest.Mocked<typeof service>
+
+jest.mock('@shared/acl/privilege-store')
+const mockedAcl = aclStore as jest.Mocked<typeof aclStore>
 
 function tokenFor(userId: number, role: string): string {
   return jwt.sign({ userId, role }, process.env.JWT_SECRET ?? 'test-secret')
@@ -18,6 +22,7 @@ describe('POST /api/panic/responder-pool', () => {
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockedAcl.userHasPrivilege.mockImplementation(async (userId: number) => userId !== 42)
   })
 
   it('returns 201 with the created pending membership for any authenticated Role', async () => {
@@ -70,6 +75,7 @@ describe('GET /api/panic/responder-pool', () => {
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockedAcl.userHasPrivilege.mockImplementation(async (userId: number) => userId !== 42)
   })
 
   it('returns 200 with the pending queue for an admin caller', async () => {
@@ -103,6 +109,7 @@ describe('PUT /api/panic/responder-pool/:id/resolve', () => {
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockedAcl.userHasPrivilege.mockImplementation(async (userId: number) => userId !== 42)
   })
 
   it('returns 200 and forwards the resolving admin when an admin approves', async () => {

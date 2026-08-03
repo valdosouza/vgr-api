@@ -13,6 +13,7 @@ D:\ProjetoVGR\api/
 ├── src/
 │   ├── gateway/            # Cross-cutting middlewares & route entry point
 │   │   ├── auth.middleware.ts       # JWT validation
+│   │   ├── require-privilege.middleware.ts # Per-endpoint ACL (decision 72)
 │   │   ├── rate-limit.middleware.ts # Per-IP rate limiting
 │   │   └── router.ts                # Module registration at /api/<module>
 │   ├── modules/            # One business module per folder (empty — first module comes from scope-refinement)
@@ -21,6 +22,7 @@ D:\ProjetoVGR\api/
 │   │   ├── runner.ts       # Applies src/migrations/sql/NNN_*.sql in order, tracked in _migrations
 │   │   └── sql/            # One numbered file per schema change
 │   ├── shared/
+│   │   ├── acl/                 # Privilege/InterfaceKey constants + cached per-user grant lookup
 │   │   ├── db/connection.ts     # MySQL pool (decimalNumbers:true — NEVER remove)
 │   │   ├── errors/http-error.ts # Custom HTTP error class
 │   │   ├── errors/error-codes.ts # Catalog of known error codes
@@ -79,8 +81,7 @@ import { something } from '@modules/other-module/other.service'  // PROHIBITED �
 
 ## INTERNATIONALIZATION
 REQUIRED: All source code, identifiers, comments, and log messages in English (project-wide standard).
-REQUIRED: API error messages returned to clients are in English for the MVP (no server-side i18n yet — see decision 17 in VGR-plano.md).
-⚠️ Multi-language API error messages (real i18n on the API side) are deferred to a future phase — flagged as an open question, not yet decided.
+REQUIRED: API error messages are English-only PERMANENTLY (decision 80) — the `code` in the error envelope is the client's translation contract, never the message text. Every `HttpError` must cite a catalog code (constructor-enforced). Field errors carry `fields[].code` + `params` (decision 83, see `shared/http/controller-utils.ts` zodToFields); the client translates by code with the English message as fallback.
 
 ## INTEGRATIONS
 | External Service / Component | Purpose | Connection / Authentication Method |
@@ -88,10 +89,10 @@ REQUIRED: API error messages returned to clients are in English for the MVP (no 
 | MySQL | Persistence (`tb_` prefix, soft delete `deleted='S'/'N'`) | `mysql2/promise`, pool via `shared/db/connection.ts` |
 | vgr-app (`D:\ProjetoVGR\app`) | Flutter client | JWT Bearer via `gateway/auth.middleware.ts` |
 
-⚠️ **To be defined in `scope-refinement`**: whether VGR needs multi-tenancy
-(schema per institution, like setes-api) or a single schema — today
-`migrations/runner.ts` assumes a single schema. If multi-tenancy is decided,
-mirror `runMigrationsForAllInstitutions` from setes-api.
+**Multi-tenancy: decided — single schema** (decision 68 in VGR-plano.md).
+Each country can request its own installation for data-sovereignty reasons,
+so there is no schema-per-tenant layer; `migrations/runner.ts` stays
+single-schema by design.
 
 ## REFERENCES
 
