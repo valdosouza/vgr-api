@@ -54,7 +54,8 @@ export function isKnownCapability(key: string): key is Capability {
  * the spec fails otherwise.
  */
 export const PENDING_WIRING: ReadonlySet<Capability> = new Set<Capability>([
-  Capabilities.REPORT_ANONYMOUS,
+  // report.anonymous: WIRED in R1 (reports.service.ts, decisions 134-142)
+  // and therefore removed — the partition spec enforces the removal.
   Capabilities.REWARD_OFFER,
   Capabilities.REWARD_MONETARY,
   Capabilities.REWARD_MEDIATION,

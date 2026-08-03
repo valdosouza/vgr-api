@@ -1,10 +1,7 @@
-export type FieldType = 'string' | 'number' | 'boolean' | 'date'
-
-export interface FieldDefinition {
-  name: string
-  type: FieldType
-  required: boolean
-}
+/** FieldType/FieldDefinition moved to @shared/risk/category-form (report-
+ *  front amendment E8) — re-exported to keep the module surface stable. */
+export type { FieldType, FieldDefinition } from '@shared/risk/category-form'
+import type { FieldDefinition } from '@shared/risk/category-form'
 
 export interface CategoryFormSchemaRow {
   category: string

@@ -1,25 +1,26 @@
 import * as repository from './category-form-schema.repository'
 import { FieldDefinition } from './category-form-schema.interface'
+import {
+  getCategoryFormSchema as readSchema,
+  invalidateCategoryFormCache,
+  validateReportDetailFields as validateFields,
+} from '@shared/risk/category-form'
 
-/** Same TTL-cache shape as risk-config.service.ts (decision 46/47). */
-const TTL_MS = 60_000
-const cache = new Map<string, { fields: FieldDefinition[]; expiresAt: number }>()
-
+/**
+ * Admin CRUD stays here; the READ path (TTL cache + validation) moved to
+ * @shared/risk/category-form when SubmitReport became a consumer
+ * (report-front amendment E8) — one cache, invalidated on write.
+ */
 export async function getCategoryFormSchema(category: string): Promise<FieldDefinition[]> {
-  const cached = cache.get(category)
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.fields
-  }
-
-  const row = await repository.findCategoryFormSchemaByCategory(category)
-  const fields = row?.fields ?? []
-  cache.set(category, { fields, expiresAt: Date.now() + TTL_MS })
-  return fields
+  return readSchema(category)
 }
 
-export async function setCategoryFormSchema(category: string, fields: FieldDefinition[]): Promise<void> {
+export async function setCategoryFormSchema(
+  category: string,
+  fields: FieldDefinition[]
+): Promise<void> {
   await repository.upsertCategoryFormSchema(category, fields)
-  cache.delete(category)
+  invalidateCategoryFormCache(category)
 }
 
 /** Not TTL-cached — the admin list view always reads the current DB state. */
@@ -27,20 +28,10 @@ export async function listCategoryFormSchemas() {
   return repository.findAllCategoryFormSchemas()
 }
 
-/** Used by SubmitReport (task 24 wiring) to validate detail fields server-side. */
+/** Used by SubmitReport to validate detail fields server-side (decision 47). */
 export async function validateReportDetailFields(
   category: string,
   submittedFields: Record<string, unknown>
 ): Promise<string[]> {
-  const schema = await getCategoryFormSchema(category)
-  const errors: string[] = []
-
-  for (const field of schema) {
-    const value = submittedFields[field.name]
-    if (field.required && (value === undefined || value === null)) {
-      errors.push(`${field.name} is required`)
-    }
-  }
-
-  return errors
+  return validateFields(category, submittedFields)
 }

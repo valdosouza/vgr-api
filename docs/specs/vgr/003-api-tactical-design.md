@@ -3,6 +3,39 @@
 
 > Backend architecture: Express/TypeScript module pattern (`interface → dto → repository → service → controller → routes`), per `docs/adr/ARCHITECTURE.md`. DDD constructs (Aggregates, VOs) map onto `<m>.interface.ts`/`<m>.service.ts`; they do not replace the module pattern.
 
+> **Amended — Report front R1 (decisions 134-142, `plano-denuncia.md`).**
+> This design predates the Legal Gate (76+), the two auth planes (119),
+> media (126-132) and the zero-friction principle (123). Amendments over
+> tasks 01-07/21/24/25, applied as they are implemented:
+> - **E1 (planes)**: tasks 03/07 say `POST /api/reports`; `/api` became
+>   the PANEL plane (119). App routes mount at **/app-reports** (pattern
+>   of /app-auth, /app-media); only admin/moderation routes live in /api.
+> - **E2 (taxonomy, decision 140)**: Report carries TWO mandatory axes —
+>   `category | freeTag` (XOR, decision 9) × `subject` (object/subject of
+>   decision 3, with a one-tap `other` fallback protecting decision 123).
+>   The spec's `SubjectTag=Child` special case becomes `subject='child'`.
+> - **E3 (Legal Gate)**: anonymous submission consumes the
+>   `report.anonymous` capability (assertCapability; removed from
+>   PENDING_WIRING when wired — the catalog partition test enforces it).
+> - **E4 (media, decisions 126-132)**: reports reference `tb_media`
+>   (attach flow, timeline event, MEDIA_MAX_PER_REPORT, blur derivative
+>   for critical tiers, `expires_at` stamped at resolution).
+> - **E5 (retention)**: task 21's dedicated SQL job is superseded by the
+>   scheduler (decision 90) + crypto-shredding (131); Child purge (25) is
+>   one more rule of the existing expiry job.
+> - **E6 (idempotency, decision 137)**: SubmitReport takes a client-
+>   generated UUID (`clientKey`, unique column); an offline-queue replay
+>   (decision 28) returns the SAME report with 200, never a duplicate.
+> - **E7 (identity)**: `reporterId` is `tb_user_account.id` (app plane) or
+>   NULL for anonymous; a logged-in reporter may still CHOOSE anonymity
+>   (decision 32) — the account is then kept internally only
+>   (accountability, decision 23), never exposed. Tasks 16-19's /auth
+>   provider flow was superseded by the implemented decisions 119-124.
+> - **E8 (numbering)**: migration filenames in tasks (`001_reports.sql`…)
+>   are stale; current sequence applies (030+). Cross-module reads forced
+>   by SubmitReport (category-form validation, accountability append) are
+>   promoted to `shared/` — the promotion tasks 24/32 already flagged.
+
 ## Section 1 — Main Structure
 
 | Element | Layer / Type | Invariants / Tech Rules | 4-line Snippet |

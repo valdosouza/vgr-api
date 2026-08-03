@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express'
 import multer from 'multer'
 import { appAuthMiddleware } from '@gateway/app-auth.middleware'
+import { optionalAppAuth } from '@gateway/optional-app-auth.middleware'
 import * as controller from '@modules/media/media.controller'
 import { mediaConfig } from '@shared/config/env'
 import { ErrorCodes } from '@shared/errors/error-codes'
@@ -16,16 +17,6 @@ import { ErrorCodes } from '@shared/errors/error-codes'
  * uploads are served through their report once M2 wires it.
  */
 const router = Router()
-
-/** Runs app auth only when a token is present; bare requests stay
- *  anonymous instead of being rejected. */
-function optionalAppAuth(req: Request, res: Response, next: NextFunction): void {
-  if (req.headers.authorization) {
-    void appAuthMiddleware(req, res, next)
-    return
-  }
-  next()
-}
 
 const uploadLimits = multer({
   storage: multer.memoryStorage(),

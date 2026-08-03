@@ -11,6 +11,7 @@ import apiRouter from '@gateway/router'
 import adminLoginRoutes from '@modules/auth/admin-login.routes'
 import appAuthRoutes from '@modules/accounts/account.routes'
 import mediaRoutes from '@modules/media/media.routes'
+import reportRoutes from '@modules/reports/reports.routes'
 import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -100,6 +101,10 @@ app.use('/app-auth', authRateLimitMiddleware, appAuthRoutes)
 // is deliberate (decisions 32/35); multipart, so the 2mb JSON limit above
 // does not apply — multer enforces MEDIA_MAX_BYTES (decision 129).
 app.use('/app-media', rateLimitMiddleware, mediaRoutes)
+
+// Reports (decisions 134-142) — the core promise: anonymous submission
+// allowed (32), gated by jurisdiction capability, idempotent (137).
+app.use('/app-reports', rateLimitMiddleware, reportRoutes)
 
 // JWT auth on all /api routes (public routes, e.g. listing anonymous
 // reports, go BEFORE this line once they exist — scope-refinement will
