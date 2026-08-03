@@ -10,6 +10,7 @@ import { authRateLimitMiddleware, rateLimitMiddleware } from '@gateway/rate-limi
 import apiRouter from '@gateway/router'
 import adminLoginRoutes from '@modules/auth/admin-login.routes'
 import appAuthRoutes from '@modules/accounts/account.routes'
+import mediaRoutes from '@modules/media/media.routes'
 import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -94,6 +95,11 @@ app.use('/auth', authRateLimitMiddleware, adminLoginRoutes)
 // audience, deliberately NOT under /api — panel tokens are rejected here
 // and app tokens are rejected there.
 app.use('/app-auth', authRateLimitMiddleware, appAuthRoutes)
+
+// Media (decisions 126-131) — app plane like /app-auth. Anonymous upload
+// is deliberate (decisions 32/35); multipart, so the 2mb JSON limit above
+// does not apply — multer enforces MEDIA_MAX_BYTES (decision 129).
+app.use('/app-media', rateLimitMiddleware, mediaRoutes)
 
 // JWT auth on all /api routes (public routes, e.g. listing anonymous
 // reports, go BEFORE this line once they exist — scope-refinement will

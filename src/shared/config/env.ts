@@ -28,6 +28,40 @@ export function allowedOrigins(): string[] {
     .filter(Boolean)
 }
 
+/**
+ * Media storage configuration (decisions 126/127/129). Limits live in env,
+ * not code (decision 129); the blob backend is selected here so swapping
+ * MinIO for a paid provider is a config change (decision 126).
+ */
+export interface MediaConfig {
+  /** 'fs' (dev/test) or 's3' (MinIO in the MVP, paid provider later). */
+  blobStore: 'fs' | 's3'
+  fsRoot: string
+  s3: { endpoint: string; region: string; bucket: string; accessKey: string; secretKey: string }
+  maxBytes: number
+  maxPerReport: number
+  /** Decision 127: avatar class is specified but OFF in the MVP. */
+  avatarEnabled: boolean
+}
+
+export function mediaConfig(): MediaConfig {
+  const blobStore = process.env.BLOB_STORE === 's3' ? 's3' : 'fs'
+  return {
+    blobStore,
+    fsRoot: process.env.MEDIA_FS_ROOT || 'data/media',
+    s3: {
+      endpoint: (process.env.S3_ENDPOINT ?? '').replace(/\/$/, ''),
+      region: process.env.S3_REGION || 'us-east-1',
+      bucket: process.env.S3_BUCKET ?? '',
+      accessKey: process.env.S3_ACCESS_KEY ?? '',
+      secretKey: process.env.S3_SECRET_KEY ?? '',
+    },
+    maxBytes: Number(process.env.MEDIA_MAX_BYTES ?? 10 * 1024 * 1024),
+    maxPerReport: Number(process.env.MEDIA_MAX_PER_REPORT ?? 10),
+    avatarEnabled: process.env.AVATAR_ENABLED === 'true',
+  }
+}
+
 /** Boot-time validation — called by server.ts before listening. */
 export function assertRequiredEnv(): void {
   if (process.env.NODE_ENV !== 'production') return
@@ -42,5 +76,17 @@ export function assertRequiredEnv(): void {
   }
   if (!process.env.LEGAL_KEK) {
     throw new Error('Refusing to start in production without LEGAL_KEK (decision 111)')
+  }
+  if (!process.env.MEDIA_KEK) {
+    throw new Error('Refusing to start in production without MEDIA_KEK (decision 126)')
+  }
+  const media = mediaConfig()
+  if (media.blobStore === 's3') {
+    const { endpoint, bucket, accessKey, secretKey } = media.s3
+    if (!endpoint || !bucket || !accessKey || !secretKey) {
+      throw new Error(
+        'BLOB_STORE=s3 requires S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY (decision 126)'
+      )
+    }
   }
 }

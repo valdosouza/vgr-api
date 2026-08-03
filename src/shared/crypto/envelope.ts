@@ -37,14 +37,19 @@ function b64(buffer: Buffer): string {
   return buffer.toString('base64url')
 }
 
-function aesEncrypt(key: Buffer, plaintext: Buffer): { iv: Buffer; tag: Buffer; data: Buffer } {
+/** Shared with media-cipher.ts — same primitive, different KEK. */
+export function aesEncrypt(
+  key: Buffer,
+  plaintext: Buffer
+): { iv: Buffer; tag: Buffer; data: Buffer } {
   const iv = randomBytes(12)
   const cipher = createCipheriv('aes-256-gcm', key, iv)
   const data = Buffer.concat([cipher.update(plaintext), cipher.final()])
   return { iv, tag: cipher.getAuthTag(), data }
 }
 
-function aesDecrypt(key: Buffer, iv: Buffer, tag: Buffer, data: Buffer): Buffer {
+/** Shared with media-cipher.ts — same primitive, different KEK. */
+export function aesDecrypt(key: Buffer, iv: Buffer, tag: Buffer, data: Buffer): Buffer {
   const decipher = createDecipheriv('aes-256-gcm', key, iv)
   decipher.setAuthTag(tag)
   return Buffer.concat([decipher.update(data), decipher.final()])
