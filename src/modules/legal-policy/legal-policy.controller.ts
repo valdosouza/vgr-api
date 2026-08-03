@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
 import { jurisdictionStateDto, legalRuleProposalDto } from '@modules/legal-policy/legal-policy.dto'
 import * as service from '@modules/legal-policy/legal-policy.service'
+import { auditFromRequest } from '@shared/audit/admin-audit'
 
 function actorId(req: Request): number {
   // authMiddleware guarantees req.user on /api routes; guards run before us.
@@ -68,6 +69,7 @@ export async function requestState(req: Request, res: Response) {
   if (body === null) return
   try {
     const data = await service.requestOperationalState(req.params.code, body.state, actorId(req))
+    auditFromRequest(req, 'state_change', 'jurisdiction', req.params.code, body)
     res.status(200).json({ ok: true, data })
   } catch (err) {
     handleError(res, err, 'legal-policy jurisdictions state PUT')
@@ -77,6 +79,7 @@ export async function requestState(req: Request, res: Response) {
 export async function confirmState(req: Request, res: Response) {
   try {
     const data = await service.confirmOperationalState(req.params.code, actorId(req))
+    auditFromRequest(req, 'state_change', 'jurisdiction', req.params.code, { confirmed: true })
     res.status(200).json({ ok: true, data })
   } catch (err) {
     handleError(res, err, 'legal-policy jurisdictions state confirm')

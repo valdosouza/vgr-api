@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
 import { interfaceSaveDto } from '@modules/interfaces/interface.dto'
+import { auditFromRequest } from '@shared/audit/admin-audit'
 import * as service from '@modules/interfaces/interface.service'
 
 export async function list(req: Request, res: Response) {
@@ -26,7 +27,9 @@ export async function create(req: Request, res: Response) {
   const body = parseBody(interfaceSaveDto, req, res)
   if (body === null) return
   try {
-    res.status(201).json({ ok: true, data: await service.createInterface(body) })
+    const created = await service.createInterface(body)
+    auditFromRequest(req, 'create', 'interface', created.id, body)
+    res.status(201).json({ ok: true, data: created })
   } catch (err) {
     handleError(res, err, 'interfaces POST')
   }
@@ -38,7 +41,9 @@ export async function update(req: Request, res: Response) {
   const body = parseBody(interfaceSaveDto, req, res)
   if (body === null) return
   try {
-    res.status(200).json({ ok: true, data: await service.updateInterface(id, body) })
+    const updated = await service.updateInterface(id, body)
+    auditFromRequest(req, 'update', 'interface', id, body)
+    res.status(200).json({ ok: true, data: updated })
   } catch (err) {
     handleError(res, err, 'interfaces PUT')
   }
@@ -49,6 +54,7 @@ export async function remove(req: Request, res: Response) {
   if (id === null) return
   try {
     await service.deleteInterface(id)
+    auditFromRequest(req, 'delete', 'interface', id)
     res.status(200).json({ ok: true, data: { id } })
   } catch (err) {
     handleError(res, err, 'interfaces DELETE')

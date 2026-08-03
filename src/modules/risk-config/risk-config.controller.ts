@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { handleError, parseBody } from '@shared/http/controller-utils'
 import { riskTierConfigUpdateDto } from './risk-config.dto'
 import { listRiskTierConfigs, setRiskTier } from './risk-config.service'
+import { auditFromRequest } from '@shared/audit/admin-audit'
 
 export async function list(req: Request, res: Response) {
   try {
@@ -18,6 +19,7 @@ export async function update(req: Request, res: Response) {
   const category = req.params.category
   try {
     await setRiskTier(category, body.tier)
+    auditFromRequest(req, 'update', 'risk_tier', category, body)
     res.status(200).json({ ok: true, data: { category, tier: body.tier } })
   } catch (err) {
     handleError(res, err, 'risk-config PUT')
