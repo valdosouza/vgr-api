@@ -40,4 +40,7 @@ export function assertRequiredEnv(): void {
       'Refusing to start in production without an explicit CORS_ORIGIN allowlist (decision 115)'
     )
   }
+  if (!process.env.LEGAL_KEK) {
+    throw new Error('Refusing to start in production without LEGAL_KEK (decision 111)')
+  }
 }
