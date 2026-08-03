@@ -43,6 +43,9 @@ export const InterfaceKeys = {
    *  derivatives vs seeing the reporter-reidentifying EXIF original. */
   MEDIA_EVIDENCE: 'media_evidence',
   MEDIA_ORIGINAL: 'media_original',
+  /** kind 'R' resource (decisions 141/142 — migration 032): freezing a
+   *  case's retention; unfreeze approval is dual-controlled in code. */
+  CASE_FREEZE: 'case_freeze',
 } as const
 
 export type InterfaceKey = (typeof InterfaceKeys)[keyof typeof InterfaceKeys]

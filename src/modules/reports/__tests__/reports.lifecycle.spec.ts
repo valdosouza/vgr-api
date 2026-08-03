@@ -1,0 +1,321 @@
+import * as repository from '@modules/reports/reports.repository'
+import * as service from '@modules/reports/reports.service'
+import { ReportRow } from '@modules/reports/reports.interface'
+import { getRiskTier } from '@shared/risk/risk-tier'
+import { validateReportDetailFields } from '@shared/risk/category-form'
+import { HttpError } from '@shared/errors/http-error'
+
+jest.mock('@modules/reports/reports.repository')
+jest.mock('@shared/audit/accountability')
+jest.mock('@shared/risk/category-form')
+jest.mock('@shared/risk/risk-tier')
+jest.mock('@shared/legal/legal-gate')
+
+const mockedRepository = repository as jest.Mocked<typeof repository>
+const mockedTier = getRiskTier as jest.MockedFunction<typeof getRiskTier>
+const mockedValidate = validateReportDetailFields as jest.MockedFunction<
+  typeof validateReportDetailFields
+>
+
+const KEY = '3f9d1c2e-0000-4000-8000-000000000001'
+const OWNER_BY_KEY = { accountId: null, clientKey: KEY }
+const OWNER_BY_ACCOUNT = { accountId: 42, clientKey: null }
+const STRANGER = { accountId: 99, clientKey: null }
+
+function row(overrides: Partial<ReportRow> = {}): ReportRow {
+  return {
+    id: 7,
+    clientKey: KEY,
+    category: 'assault',
+    freeTag: null,
+    subject: 'adult',
+    detailFields: { where: 'praça' },
+    lat: -23.556789,
+    lng: -46.634567,
+    anonymous: false,
+    reporterAccountId: 42,
+    status: 'open',
+    resolvedAt: null,
+    expiresAt: null,
+    frozen: false,
+    frozenReason: null,
+    frozenAt: null,
+    purged: false,
+    createdAt: new Date('2026-08-03T14:37:42Z'),
+    ...overrides,
+  }
+}
+
+describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedTier.mockResolvedValue('low')
+    mockedValidate.mockResolvedValue([])
+    mockedRepository.getTimeline.mockResolvedValue([])
+    mockedRepository.findOffersWithNames.mockResolvedValue([])
+    mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.findPendingUnfreeze.mockResolvedValue(null)
+    mockedRepository.markResolved.mockResolvedValue(true)
+    mockedRepository.freeze.mockResolvedValue(true)
+  })
+
+  describe('editReport (decision 19)', () => {
+    it('the anonymous owner edits by presenting the clientKey (decision 134 pattern)', async () => {
+      mockedRepository.findById.mockResolvedValue(row({ reporterAccountId: null, anonymous: true }))
+
+      const result = await service.editReport(7, { detailFields: { where: 'rua' } }, OWNER_BY_KEY)
+
+      expect(result.changedFields).toEqual(['detailFields'])
+      expect(mockedRepository.appendTimelineEvent).toHaveBeenCalledWith(7, 'edited', {
+        changedFields: ['detailFields'],
+      })
+    })
+
+    it('a non-owner gets 404, never 403 — existence is information', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+      await expect(
+        service.editReport(7, { detailFields: {} }, STRANGER)
+      ).rejects.toMatchObject({ statusCode: 404 })
+    })
+
+    it('a frozen case is untouchable even for the owner (decision 141)', async () => {
+      mockedRepository.findById.mockResolvedValue(row({ frozen: true }))
+      await expect(
+        service.editReport(7, { detailFields: {} }, OWNER_BY_ACCOUNT)
+      ).rejects.toMatchObject({ statusCode: 422 })
+    })
+
+    it('a resolved case cannot be edited', async () => {
+      mockedRepository.findById.mockResolvedValue(row({ status: 'resolved' }))
+      await expect(
+        service.editReport(7, { detailFields: {} }, OWNER_BY_ACCOUNT)
+      ).rejects.toMatchObject({ statusCode: 422 })
+    })
+
+    it('freeTag only changes on a free-tag report (taxonomy immutable, 140)', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+      await expect(
+        service.editReport(7, { freeTag: 'outra' }, OWNER_BY_ACCOUNT)
+      ).rejects.toMatchObject({ statusCode: 422 })
+    })
+
+    it('edited detail fields are re-validated against the category form (47)', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+      mockedValidate.mockResolvedValue(['where is required'])
+      await expect(
+        service.editReport(7, { detailFields: {} }, OWNER_BY_ACCOUNT)
+      ).rejects.toMatchObject({ statusCode: 422 })
+      expect(mockedRepository.updateEditableFields).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('resolveReport (decisions 18/131)', () => {
+    it('stamps the retention clock: expires_at ≈ +90 days', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+
+      await service.resolveReport(7, OWNER_BY_ACCOUNT)
+
+      const expiresAt = mockedRepository.markResolved.mock.calls[0][1]
+      const days = (expiresAt.getTime() - Date.now()) / 86_400_000
+      expect(days).toBeGreaterThan(89.9)
+      expect(days).toBeLessThan(90.1)
+      expect(mockedRepository.appendTimelineEvent).toHaveBeenCalledWith(7, 'resolved', null)
+    })
+
+    it('cannot resolve twice — the atomic transition answers 422', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+      mockedRepository.markResolved.mockResolvedValue(false)
+      await expect(service.resolveReport(7, OWNER_BY_ACCOUNT)).rejects.toMatchObject({
+        statusCode: 422,
+      })
+      expect(mockedRepository.appendTimelineEvent).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('getReportView (decisions 24/41/50/135)', () => {
+    it('a stranger on an OPEN case gets the degraded public view — never the exact position', async () => {
+      mockedTier.mockResolvedValue('high')
+      mockedRepository.findById.mockResolvedValue(row())
+
+      const view = await service.getReportView(7, STRANGER)
+
+      expect(view.access).toBe('public')
+      if (view.access === 'public') {
+        expect(view.position).toEqual({ lat: -23.56, lng: -46.63 }) // 0.01 grid
+        expect(view.createdAt).toBe('2026-08-03T14:00:00.000Z') // hour bucket
+      }
+      expect(mockedRepository.getTimeline).not.toHaveBeenCalled()
+    })
+
+    it('a stranger on a RESOLVED case gets the closure summary only (50)', async () => {
+      mockedRepository.findById.mockResolvedValue(
+        row({ status: 'resolved', resolvedAt: new Date('2026-08-03T15:00:00Z') })
+      )
+      const view = await service.getReportView(7, STRANGER)
+      expect(view.access).toBe('summary')
+      expect((view as any).position).toBeUndefined()
+    })
+
+    it('the owner sees everything, with offers masked on high tier (40/41/60)', async () => {
+      mockedTier.mockResolvedValue('high')
+      mockedRepository.findById.mockResolvedValue(row())
+      mockedRepository.findOffersWithNames.mockResolvedValue([
+        {
+          id: 1,
+          helpType: 'physical_presence',
+          anonymous: false,
+          helperDisplayName: 'Ana',
+          createdAt: new Date('2026-08-03T15:00:00Z'),
+        },
+      ])
+
+      const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+
+      expect(view.access).toBe('owner')
+      if (view.access === 'owner') {
+        expect(view.position).toEqual({ lat: -23.556789, lng: -46.634567 }) // exact
+        expect(view.offers).toEqual([
+          {
+            helpOfferId: 1,
+            helpType: 'physical_presence',
+            helperDisplayName: null, // high tier masks even a willing identity
+            createdAt: null, // and never leaks timestamps (41)
+          },
+        ])
+      }
+    })
+
+    it('low tier shows an identified helper who CHOSE to be seen (6)', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+      mockedRepository.findOffersWithNames.mockResolvedValue([
+        {
+          id: 1,
+          helpType: 'share',
+          anonymous: false,
+          helperDisplayName: 'Ana',
+          createdAt: new Date('2026-08-03T15:00:00Z'),
+        },
+        {
+          id: 2,
+          helpType: 'share',
+          anonymous: true,
+          helperDisplayName: 'Beto',
+          createdAt: new Date('2026-08-03T15:01:00Z'),
+        },
+      ])
+
+      const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+      if (view.access === 'owner') {
+        expect(view.offers?.[0].helperDisplayName).toBe('Ana')
+        // Anonymity is the helper's choice — the join knew the name, the
+        // view never shows it.
+        expect(view.offers?.[1].helperDisplayName).toBeNull()
+      }
+    })
+
+    it('an identified helper with an offer is a participant: full view, no offers list', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+      mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+
+      const view = await service.getReportView(7, STRANGER)
+
+      expect(view.access).toBe('participant')
+      if (view.access === 'participant') {
+        expect(view.position).toEqual({ lat: -23.556789, lng: -46.634567 })
+        expect(view.offers).toBeUndefined()
+      }
+    })
+
+    it('a purged case is gone (25/131)', async () => {
+      mockedRepository.findById.mockResolvedValue(row({ purged: true }))
+      await expect(service.getReportView(7, OWNER_BY_ACCOUNT)).rejects.toMatchObject({
+        statusCode: 404,
+      })
+    })
+  })
+
+  describe('freeze / unfreeze (decision 141)', () => {
+    it('freeze requires the case to not be frozen already', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+      await service.freezeCase(7, 'Ofício 123/2026')
+      expect(mockedRepository.freeze).toHaveBeenCalledWith(7, 'Ofício 123/2026')
+
+      mockedRepository.freeze.mockResolvedValue(false)
+      await expect(service.freezeCase(7, 'Ofício 123/2026')).rejects.toMatchObject({
+        statusCode: 422,
+      })
+    })
+
+    it('freeze leaves NO timeline event — a freeze must not tip off the reporter', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+      await service.freezeCase(7, 'Ofício 123/2026')
+      expect(mockedRepository.appendTimelineEvent).not.toHaveBeenCalled()
+    })
+
+    it('unfreeze demands a SECOND, distinct human (141d)', async () => {
+      mockedRepository.findById.mockResolvedValue(row({ frozen: true }))
+      mockedRepository.findPendingUnfreeze.mockResolvedValue({
+        id: 5,
+        reason: 'caso arquivado',
+        requestedBy: 3,
+        requestedAt: new Date(),
+      })
+
+      await expect(service.approveUnfreeze(7, 3)).rejects.toMatchObject({ statusCode: 422 })
+
+      const result = await service.approveUnfreeze(7, 4)
+      expect(result.frozen).toBe(false)
+      expect(mockedRepository.approveUnfreezeRequest).toHaveBeenCalledWith(5, 4)
+    })
+
+    it('unfreezing a RESOLVED case restarts the 90-day clock (141d)', async () => {
+      mockedRepository.findById.mockResolvedValue(row({ frozen: true, status: 'resolved' }))
+      mockedRepository.findPendingUnfreeze.mockResolvedValue({
+        id: 5,
+        reason: 'r',
+        requestedBy: 3,
+        requestedAt: new Date(),
+      })
+
+      await service.approveUnfreeze(7, 4)
+
+      const newExpiry = mockedRepository.unfreeze.mock.calls[0][1] as Date
+      const days = (newExpiry.getTime() - Date.now()) / 86_400_000
+      expect(days).toBeGreaterThan(89.9)
+    })
+
+    it('unfreezing an OPEN case leaves no expiry — the clock starts at resolution', async () => {
+      mockedRepository.findById.mockResolvedValue(row({ frozen: true, status: 'open' }))
+      mockedRepository.findPendingUnfreeze.mockResolvedValue({
+        id: 5,
+        reason: 'r',
+        requestedBy: 3,
+        requestedAt: new Date(),
+      })
+      await service.approveUnfreeze(7, 4)
+      expect(mockedRepository.unfreeze).toHaveBeenCalledWith(7, null)
+    })
+
+    it('a second unfreeze request while one is pending is a 409', async () => {
+      mockedRepository.findById.mockResolvedValue(row({ frozen: true }))
+      mockedRepository.findPendingUnfreeze.mockResolvedValue({
+        id: 5,
+        reason: 'r',
+        requestedBy: 3,
+        requestedAt: new Date(),
+      })
+      await expect(service.requestUnfreeze(7, 'de novo', 4)).rejects.toMatchObject({
+        statusCode: 409,
+      })
+    })
+  })
+
+  it('purge drains batches and respects the repository contract (25/131)', async () => {
+    mockedRepository.findExpiredReports
+      .mockResolvedValueOnce([1, 2, 3])
+      .mockResolvedValue([])
+    const result = await service.purgeExpiredReports()
+    expect(result.purged).toBe(3)
+    expect(mockedRepository.purgeReport).toHaveBeenCalledTimes(3)
+  })
+})

@@ -1,5 +1,6 @@
 import cron from 'node-cron'
 import { runMediaExpiry } from '@modules/media/media-expiry.job'
+import { purgeExpiredReports } from '@modules/reports/reports.service'
 import { withJobLock } from '@shared/db/job-lock'
 import logger from '@shared/logger/logger'
 
@@ -34,5 +35,8 @@ export function startScheduler(): void {
   // keeps the shredding delay after expiry under an hour.
   cron.schedule('0 * * * *', () => void run('media-expiry', runMediaExpiry))
 
-  logger.info('Scheduler started (media-expiry hourly)')
+  // Report purge (decisions 25/131) — same clock, its own lock.
+  cron.schedule('30 * * * *', () => void run('report-purge', purgeExpiredReports))
+
+  logger.info('Scheduler started (media-expiry, report-purge hourly)')
 }

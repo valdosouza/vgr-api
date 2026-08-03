@@ -24,4 +24,22 @@ const router = Router()
  */
 router.post('/', optionalAppAuth, controller.submit)
 
+/**
+ * @swagger
+ * /app-reports/{id}:
+ *   get:
+ *     summary: Report view — owner/participant full, public degraded, resolved summary (decisions 50/135)
+ *     security: []
+ *   put:
+ *     summary: Edits the reporter's own words on an open, unfrozen report (decision 19)
+ *     security: []
+ * /app-reports/{id}/resolve:
+ *   post:
+ *     summary: Resolves the report; helpers stay linked, retention clock starts (decisions 18/131)
+ *     security: []
+ */
+router.get('/:id', optionalAppAuth, controller.getById)
+router.put('/:id', optionalAppAuth, controller.edit)
+router.post('/:id/resolve', optionalAppAuth, controller.resolve)
+
 export default router

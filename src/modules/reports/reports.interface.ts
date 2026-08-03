@@ -14,14 +14,18 @@ export interface ReportRow {
   freeTag: string | null
   subject: Subject
   detailFields: Record<string, unknown> | null
-  lat: number
-  lng: number
+  /** Null only after purge (decisions 25/131) — purged rows 404 on read. */
+  lat: number | null
+  lng: number | null
   anonymous: boolean
   reporterAccountId: number | null
   status: ReportStatus
   resolvedAt: Date | null
   expiresAt: Date | null
   frozen: boolean
+  frozenReason: string | null
+  frozenAt: Date | null
+  purged: boolean
   createdAt: Date
 }
 
@@ -50,4 +54,87 @@ export interface SubmitReportResult {
   /** True when the clientKey had already been accepted (decision 137) —
    *  the controller answers 200 instead of 201. */
   replayed: boolean
+}
+
+/**
+ * Who is looking (R3). Ownership is proved by the account OR by
+ * presenting the report's clientKey — the bearer-secret pattern of
+ * decision 134 applied to reports: the anonymous reporter's app kept the
+ * key it generated (137), and that key IS the ownership proof.
+ */
+export interface ViewerContext {
+  accountId: number | null
+  clientKey: string | null
+}
+
+export interface EditReportInput {
+  freeTag?: string
+  detailFields?: Record<string, unknown>
+}
+
+export interface TimelineEventView {
+  eventType: string
+  payload: Record<string, unknown> | null
+  createdAt: string
+}
+
+/** Offer as the report OWNER sees it (decisions 6/40/41/60): identity
+ *  only when the helper chose it AND the tier is not high; timestamps
+ *  never on high tier. Shape owned here — no cross-module type import. */
+export interface OfferView {
+  helpOfferId: number
+  helpType: string
+  helperDisplayName: string | null
+  createdAt: string | null
+}
+
+/** GetReportVisibility output (decisions 24/41/50/135). */
+export type ReportView =
+  | {
+      access: 'summary'
+      reportId: number
+      category: Category | null
+      freeTag: string | null
+      subject: Subject
+      status: 'resolved'
+      tier: string
+      resolvedAt: string
+    }
+  | {
+      access: 'public'
+      reportId: number
+      category: Category | null
+      freeTag: string | null
+      subject: Subject
+      status: 'open'
+      tier: string
+      position: { lat: number; lng: number }
+      detailFields: Record<string, unknown> | null
+      createdAt: string
+    }
+  | {
+      access: 'participant' | 'owner'
+      reportId: number
+      category: Category | null
+      freeTag: string | null
+      subject: Subject
+      status: ReportStatus
+      tier: string
+      position: { lat: number; lng: number }
+      detailFields: Record<string, unknown> | null
+      createdAt: string
+      resolvedAt: string | null
+      timeline: TimelineEventView[]
+      /** Owner only — absent for participants (decision 55's caution). */
+      offers?: OfferView[]
+    }
+
+/** Panel screen state (decisions 141/142). */
+export interface CaseFreezeState {
+  reportId: number
+  status: ReportStatus
+  frozen: boolean
+  frozenReason: string | null
+  frozenAt: string | null
+  pendingUnfreeze: { reason: string; requestedBy: number; requestedAt: string } | null
 }

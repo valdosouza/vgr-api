@@ -32,3 +32,18 @@ export const submitReportDto = z
   })
 
 export type SubmitReportBody = z.infer<typeof submitReportDto>
+
+/** Editable surface (R3, decision 19): the taxonomy axes and the position
+ *  are immutable; only the reporter's own words change. */
+export const editReportDto = z
+  .object({
+    freeTag: z.string().trim().min(1).max(50).optional(),
+    detailFields: z.record(z.unknown()).optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to edit' })
+
+/** Panel freeze/unfreeze bodies (decision 141): reason is MANDATORY —
+ *  the writ/case number that justifies touching retention. */
+export const freezeReasonDto = z.object({
+  reason: z.string().trim().min(3).max(120),
+})

@@ -57,9 +57,55 @@ in `reports.interface.ts`. Admin-managed registry is a future evolution.
 anonymous flag; status open|resolved; `expires_at`/`frozen` ready for
 R3/decision 141) and `tb_report_timeline` (append-only, no soft-delete).
 
+## Lifecycle (R3 — decisions 18/19/50/131/135/141/142)
+
+Ownership is the account OR the report's `clientKey` presented in the
+`x-client-key` header (bearer-secret pattern of decision 134 — the
+anonymous reporter's app kept the key it generated; header, never URL).
+
+- `PUT /app-reports/:id` — owner edits their own words (freeTag on
+  free-tag reports, detailFields re-validated against the category form).
+  Taxonomy axes and position are immutable; resolved and FROZEN cases are
+  untouchable (141 — evidence in an authority's hands). Timeline `edited`
+  with changedFields (19). Non-owners get 404, never 403.
+- `POST /app-reports/:id/resolve` — atomic transition (0 rows = already
+  resolved); stamps `expires_at = +90 days` (131); helpers stay linked and
+  the timeline `resolved` event is their in-app closure notice (18).
+- `GET /app-reports/:id` — GetReportVisibility (50): owner gets
+  everything plus the offers list (helper identity only when the helper
+  chose it AND tier isn't high — 6/40/60; timestamps never on high tier —
+  41); an identified helper with an offer is a participant (full view, no
+  offers list); anyone else gets the tier-DEGRADED public view on open
+  cases (same `shared/geo/degrade` grid as the feed — the sharper surface
+  would betray the position) or the closure summary on resolved ones.
+
+## Help offers (`/app-help-offers`, decisions 10/20/34/35)
+
+Anonymous offers accepted in full (35, accountability trail 23);
+self-dealing rejected (20); one identified offer per report (dup = 409);
+no NEW offers after resolution (18 keeps only existing links); the
+timeline event carries the help type and never the helper identity.
+
+## Case freeze (`/api/case-freeze`, decisions 141/142 — panel plane)
+
+The ONE panel surface this front adds: `GET /:id` state,
+`POST /:id/freeze` (one human, MANDATORY reason — writ/case number),
+`POST /:id/unfreeze-request` + `POST /:id/unfreeze-approve` (DISTINCT
+users — unfreezing re-arms destruction, dual-control pattern of 45/107).
+Unfreezing a resolved case restarts the 90-day clock; an open case keeps
+no expiry until resolution. Freeze writes NO timeline event (it would tip
+off a reporter under investigation) — the record is the audit row (116).
+Purge job (`report-purge`, hourly at :30): nulls detail fields, exact
+position, free-tag text and timeline payloads of expired unfrozen cases,
+keeping the statistical skeleton (25/131).
+
 ## Tests
 
 `reports.service.spec` (gate order, decision-32 choice, replay, dup race,
 form 47, accountability resilience), `reports.routes.spec` (anonymous
-end-to-end, 451, XOR, mandatory subject, invalid-token 401), plus the
-risk-config spec adapted to the shared read path. 47 suites / 282 tests.
+end-to-end, 451, XOR, mandatory subject, invalid-token 401),
+`reports.lifecycle.spec` (ownership by clientKey, frozen untouchable,
+retention stamp, visibility tiers, masking, dual-control unfreeze, purge),
+`help-offers.service.spec` (anti-fraud, 409, identity-free timeline),
+`case-freeze.routes.spec` (grants, audit, plane separation), plus the
+risk-config spec adapted to the shared read path. 53 suites / 333 tests.

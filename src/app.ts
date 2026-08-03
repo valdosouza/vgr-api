@@ -13,6 +13,7 @@ import appAuthRoutes from '@modules/accounts/account.routes'
 import mediaRoutes from '@modules/media/media.routes'
 import reportRoutes from '@modules/reports/reports.routes'
 import feedRoutes from '@modules/help-matching/help-matching.routes'
+import helpOfferRoutes from '@modules/help-offers/help-offers.routes'
 import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -109,6 +110,9 @@ app.use('/app-reports', rateLimitMiddleware, reportRoutes)
 
 // Nearby feed (decisions 2/7/21/135) — anonymous, tier-degraded output.
 app.use('/app-feed', rateLimitMiddleware, feedRoutes)
+
+// Help offers (decisions 10/20/34/35) — anonymous help is a promise.
+app.use('/app-help-offers', rateLimitMiddleware, helpOfferRoutes)
 
 // JWT auth on all /api routes (public routes, e.g. listing anonymous
 // reports, go BEFORE this line once they exist — scope-refinement will

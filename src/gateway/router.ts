@@ -12,6 +12,7 @@ import interfaceRoutes from '@modules/interfaces/interface.routes'
 import systemModuleRoutes from '@modules/system-modules/system-module.routes'
 import userRoutes from '@modules/users/user.routes'
 import mediaAdminRoutes from '@modules/media/media-admin.routes'
+import caseFreezeRoutes from '@modules/reports/case-freeze.routes'
 
 /**
  * Central router — every module is mounted here at /api/<module>,
@@ -47,5 +48,8 @@ router.use('/legal-policy', legalPolicyRoutes)
 // Panel reads of evidence media (M3, decisions 126-131) — every served
 // image leaves an audit row; the EXIF original needs a second grant.
 router.use('/media', mediaAdminRoutes)
+
+// Case freeze (decisions 141/142) — freeze with 1, unfreeze with 2.
+router.use('/case-freeze', caseFreezeRoutes)
 
 export default router
