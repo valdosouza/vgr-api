@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import { AuthenticatedUser } from '@shared/types/express'
+import { getSessionInfo } from '@shared/acl/session-store'
 import { jwtSecret } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -13,7 +14,7 @@ import logger from '@shared/logger/logger'
  * helpers do NOT go through this middleware — only routes that require
  * identity (e.g. claiming a reward) should require a token.
  */
-export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   const header = req.headers.authorization
   if (!header?.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Missing token' })
@@ -32,11 +33,31 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
 
   const token = header.slice('Bearer '.length)
+  let payload: AuthenticatedUser
   try {
-    const payload = jwt.verify(token, secret) as AuthenticatedUser
-    req.user = payload
-    next()
+    payload = jwt.verify(token, secret) as AuthenticatedUser
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' })
+    return
   }
+
+  // Session revocation check (decision 112): the token's `sv` claim must
+  // match tb_user.session_version (60s cache). Bumping the version —
+  // deactivation, password change, "drop sessions" — kills every
+  // outstanding token in <=60s. Fails closed on lookup error, same
+  // posture as requirePrivilege (decision 72).
+  try {
+    const session = await getSessionInfo(payload.userId)
+    if (!session || !session.active || session.sessionVersion !== payload.sv) {
+      res.status(401).json({ error: 'Invalid or expired token' })
+      return
+    }
+  } catch (err) {
+    logger.error('Session lookup failed — failing closed', { err })
+    res.status(500).json({ error: 'Internal error', code: 'INTERNAL' })
+    return
+  }
+
+  req.user = payload
+  next()
 }

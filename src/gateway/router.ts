@@ -6,6 +6,7 @@ import dualControlAccessRoutes from '@modules/admin-access/dual-control.routes'
 import monetizationConfigRoutes from '@modules/monetization-config/fee-rule.routes'
 import coreRoutes from '@modules/core/core.routes'
 import legalPolicyRoutes from '@modules/legal-policy/legal-policy.routes'
+import { renew } from '@modules/auth/admin-login.controller'
 import privilegeRoutes from '@modules/privileges/privilege.routes'
 import interfaceRoutes from '@modules/interfaces/interface.routes'
 import systemModuleRoutes from '@modules/system-modules/system-module.routes'
@@ -33,6 +34,10 @@ router.use('/privileges', privilegeRoutes)
 router.use('/interfaces', interfaceRoutes)
 router.use('/system-modules', systemModuleRoutes)
 router.use('/users', userRoutes)
+
+// Sliding session renewal (decision 112) — behind authMiddleware like all
+// of /api; any authenticated team user, no privilege needed.
+router.post('/auth/renew', renew)
 
 // Legal Gate administration (decisions 103-109) — the gate itself lives in
 // @shared/legal and is consumed via requireCapability / assertCapability.

@@ -59,6 +59,13 @@ export async function updateUser(
   }
 }
 
+/** Kills every outstanding session of the user in <=60s (decision 112).
+ *  Same query as the auth module's — duplicated on purpose: modules never
+ *  import each other (ARCHITECTURE.md). */
+export async function bumpSessionVersion(id: number): Promise<void> {
+  await pool.query(`UPDATE tb_user SET session_version = session_version + 1 WHERE id = ?`, [id])
+}
+
 export async function softDeleteUser(id: number): Promise<void> {
   const conn = await pool.getConnection()
   try {

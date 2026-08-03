@@ -10,7 +10,7 @@ jest.mock('@shared/mailer/mailer')
 const mockedRepository = repository as jest.Mocked<typeof repository>
 const mockedMailer = mailer as jest.Mocked<typeof mailer>
 
-const account = { id: 1, email: 'valdo@vgr.com.br', passwordHash: 'x', active: 'S' as const }
+const account = { id: 1, email: 'valdo@vgr.com.br', passwordHash: 'x', active: 'S' as const, sessionVersion: 1, failedLoginCount: 0 }
 
 describe('password-recovery.service recoveryPassword', () => {
   beforeEach(() => {
@@ -69,11 +69,21 @@ describe('password-recovery.service changePassword', () => {
     expect(await bcrypt.compare('new-pass', hash)).toBe(true)
   })
 
-  it('rejects a wrong code with the generic 401', async () => {
+  it('rejects a wrong code with the generic 401 and counts the attempt (decision 113)', async () => {
     mockedRepository.getActivationInfo.mockResolvedValue({ activationKey: '123456', ageMinutes: 5 })
 
     await expect(changePassword('valdo@vgr.com.br', '654321', 'new-pass')).rejects.toThrow(HttpError)
     expect(mockedRepository.updatePassword).not.toHaveBeenCalled()
+    // The 5th wrong attempt wipes the code inside registerRecoveryAttempt —
+    // the service's job is to count every miss while a code exists.
+    expect(mockedRepository.registerRecoveryAttempt).toHaveBeenCalledWith(1)
+  })
+
+  it('does not count attempts when no code is pending — nothing to brute-force', async () => {
+    mockedRepository.getActivationInfo.mockResolvedValue({ activationKey: null, ageMinutes: 0 })
+
+    await expect(changePassword('valdo@vgr.com.br', '654321', 'new-pass')).rejects.toThrow(HttpError)
+    expect(mockedRepository.registerRecoveryAttempt).not.toHaveBeenCalled()
   })
 
   it('rejects an expired code (older than 15 minutes) with the same generic 401', async () => {

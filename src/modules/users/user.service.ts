@@ -3,6 +3,7 @@ import * as repository from '@modules/users/user.repository'
 import { UserCreateInput, UserUpdateInput } from '@modules/users/user.dto'
 import { UserInterfacePrivileges, UserRow } from '@modules/users/user.interface'
 import { invalidateUserPrivileges } from '@shared/acl/privilege-store'
+import { invalidateSession } from '@shared/acl/session-store'
 import { InterfaceKeys, Privileges } from '@shared/acl/privileges'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
@@ -36,7 +37,7 @@ export async function createUser(input: UserCreateInput): Promise<UserRow> {
 }
 
 export async function updateUser(id: number, input: UserUpdateInput): Promise<UserRow> {
-  await getUser(id)
+  const before = await getUser(id)
   const clash = await repository.findUserByEmail(input.email)
   if (clash && clash.id !== id) {
     throw new HttpError(409, 'Email already in use', undefined, ErrorCodes.DUPLICATE)
@@ -47,6 +48,12 @@ export async function updateUser(id: number, input: UserUpdateInput): Promise<Us
     { name: input.name, email: input.email, active: input.active, locale: input.locale },
     passwordHash
   )
+  // Session revocation (decision 112): a password set by the admin or a
+  // deactivation kills every outstanding session of the target in <=60s.
+  if (passwordHash || (before.active === 'S' && input.active === 'N')) {
+    await repository.bumpSessionVersion(id)
+    invalidateSession(id)
+  }
   return getUser(id)
 }
 
@@ -59,7 +66,9 @@ export async function deleteUser(id: number, actorId: number): Promise<void> {
   }
   await getUser(id)
   await repository.softDeleteUser(id)
+  await repository.bumpSessionVersion(id)
   invalidateUserPrivileges(id)
+  invalidateSession(id)
 }
 
 export async function getUserPrivilegeMatrix(id: number): Promise<UserInterfacePrivileges[]> {

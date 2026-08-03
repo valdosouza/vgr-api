@@ -9,10 +9,17 @@ jest.mock('../fee-rule.service')
 const mockedService = service as jest.Mocked<typeof service>
 
 jest.mock('@shared/acl/privilege-store')
+
+// Session check (decision 112): tokens below carry sv:1, store answers 1.
+jest.mock('@shared/acl/session-store', () => ({
+  getSessionInfo: async () => ({ sessionVersion: 1, active: true }),
+  invalidateSession: () => undefined,
+  invalidateAllSessions: () => undefined,
+}))
 const mockedAcl = aclStore as jest.Mocked<typeof aclStore>
 
 function tokenFor(role: string): string {
-  return jwt.sign({ userId: role === 'admin' ? 1 : 2, role }, process.env.JWT_SECRET ?? 'test-secret')
+  return jwt.sign({ userId: role === 'admin' ? 1 : 2, role, sv: 1 }, process.env.JWT_SECRET ?? 'test-secret')
 }
 
 describe('GET /api/monetization-config', () => {

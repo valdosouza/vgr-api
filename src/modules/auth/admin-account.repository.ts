@@ -3,23 +3,69 @@ import { AdminAccountRow } from '@modules/auth/admin-account.interface'
 
 export async function findAdminAccountByEmail(email: string): Promise<AdminAccountRow | null> {
   const [rows] = await pool.query<any[]>(
-    `SELECT id, email, password_hash AS passwordHash, active
+    `SELECT id, email, password_hash AS passwordHash, active,
+            session_version AS sessionVersion, failed_login_count AS failedLoginCount
      FROM tb_user WHERE email = ? AND deleted = 'N'`,
     [email]
   )
   return rows[0] ?? null
 }
 
-export async function registerLogin(id: number): Promise<void> {
-  await pool.query(`UPDATE tb_user SET last_login_at = NOW() WHERE id = ?`, [id])
+export async function findAdminAccountById(id: number): Promise<AdminAccountRow | null> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT id, email, password_hash AS passwordHash, active,
+            session_version AS sessionVersion, failed_login_count AS failedLoginCount
+     FROM tb_user WHERE id = ? AND deleted = 'N'`,
+    [id]
+  )
+  return rows[0] ?? null
 }
 
-/** Stores the 6-digit recovery code; updated_at marks the start of its window. */
+/** Success also clears the progressive-delay counter (decision 113). */
+export async function registerLogin(id: number): Promise<void> {
+  await pool.query(
+    `UPDATE tb_user SET last_login_at = NOW(), failed_login_count = 0 WHERE id = ?`,
+    [id]
+  )
+}
+
+export async function registerFailedLogin(id: number): Promise<void> {
+  await pool.query(
+    `UPDATE tb_user SET failed_login_count = failed_login_count + 1 WHERE id = ?`,
+    [id]
+  )
+}
+
+/** Kills every outstanding session of the user in <=60s (decision 112). */
+export async function bumpSessionVersion(id: number): Promise<void> {
+  await pool.query(`UPDATE tb_user SET session_version = session_version + 1 WHERE id = ?`, [id])
+}
+
+/** Returns the new attempt count; at 5 the code itself is wiped (decision 113). */
+export async function registerRecoveryAttempt(id: number): Promise<number> {
+  await pool.query(
+    `UPDATE tb_user SET recovery_attempt_count = recovery_attempt_count + 1 WHERE id = ?`,
+    [id]
+  )
+  const [rows] = await pool.query<any[]>(
+    `SELECT recovery_attempt_count AS count FROM tb_user WHERE id = ?`,
+    [id]
+  )
+  const count = rows[0]?.count ?? 0
+  if (count >= 5) {
+    await pool.query(`UPDATE tb_user SET activation_key = NULL WHERE id = ?`, [id])
+  }
+  return count
+}
+
+/** Stores the 6-digit recovery code; updated_at marks the start of its
+ *  window. A fresh code resets the attempt counter (decision 113). */
 export async function setActivationKey(id: number, code: string): Promise<void> {
-  await pool.query(`UPDATE tb_user SET activation_key = ?, updated_at = NOW() WHERE id = ?`, [
-    code,
-    id,
-  ])
+  await pool.query(
+    `UPDATE tb_user SET activation_key = ?, recovery_attempt_count = 0, updated_at = NOW()
+     WHERE id = ?`,
+    [code, id]
+  )
 }
 
 export async function getActivationInfo(
@@ -34,9 +80,14 @@ export async function getActivationInfo(
   return rows[0] ?? null
 }
 
+/** Password change also revokes every session (decision 112) and clears
+ *  the recovery state. */
 export async function updatePassword(id: number, passwordHash: string): Promise<void> {
   await pool.query(
-    `UPDATE tb_user SET password_hash = ?, activation_key = NULL WHERE id = ?`,
+    `UPDATE tb_user
+     SET password_hash = ?, activation_key = NULL, recovery_attempt_count = 0,
+         session_version = session_version + 1
+     WHERE id = ?`,
     [passwordHash, id]
   )
 }

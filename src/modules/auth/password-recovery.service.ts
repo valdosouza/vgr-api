@@ -1,6 +1,7 @@
 import { randomInt } from 'crypto'
 import bcrypt from 'bcryptjs'
 import * as repository from '@modules/auth/admin-account.repository'
+import { invalidateSession } from '@shared/acl/session-store'
 import { isMailerConfigured, sendMail } from '@shared/mailer/mailer'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
@@ -68,6 +69,11 @@ export async function changePassword(
 
   const info = await repository.getActivationInfo(account.id)
   if (!info || !info.activationKey || info.activationKey !== code) {
+    // Wrong code counts; the 5th wipes the code entirely (decision 113) —
+    // brute force against the 10^6 space dies without locking the account.
+    if (info?.activationKey) {
+      await repository.registerRecoveryAttempt(account.id)
+    }
     throw invalidCode()
   }
   if (info.ageMinutes > RECOVERY_CODE_TTL_MINUTES) {
@@ -75,5 +81,8 @@ export async function changePassword(
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10)
+  // updatePassword also bumps session_version (decision 112) — a password
+  // reset kills every session that predates it.
   await repository.updatePassword(account.id, passwordHash)
+  invalidateSession(account.id)
 }

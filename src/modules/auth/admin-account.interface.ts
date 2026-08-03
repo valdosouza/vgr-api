@@ -7,4 +7,8 @@ export interface AdminAccountRow {
   email: string
   passwordHash: string
   active: 'S' | 'N'
+  /** Stamped into the JWT; bumping it revokes every session (decision 112). */
+  sessionVersion: number
+  /** Progressive-delay counter (decision 113) — resets on success. */
+  failedLoginCount: number
 }

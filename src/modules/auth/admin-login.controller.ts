@@ -14,3 +14,14 @@ export async function login(req: Request, res: Response) {
     handleError(res, err, 'auth/admin-login POST')
   }
 }
+
+/** Sliding renewal (decision 112) — authMiddleware already validated the
+ *  token AND its session_version before this runs. */
+export async function renew(req: Request, res: Response) {
+  try {
+    const jwt = await service.renewSession(req.user!.userId)
+    res.status(200).json({ jwt })
+  } catch (err) {
+    handleError(res, err, 'api/auth/renew POST')
+  }
+}
