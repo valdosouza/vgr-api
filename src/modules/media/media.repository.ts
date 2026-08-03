@@ -99,3 +99,24 @@ export async function shred(id: number): Promise<void> {
     [id]
   )
 }
+
+/** Due for the retention job (decision 131): expiry reached, not frozen
+ *  (a case in an authority's hands never expires until unfrozen). */
+export async function findExpired(
+  limit: number
+): Promise<Array<{ id: number; storagePrefix: string; keepOriginal: boolean }>> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT id, storage_prefix AS storagePrefix, keep_original AS keepOriginal
+     FROM tb_media
+     WHERE deleted = 'N' AND status <> 'deleted' AND frozen = 'N'
+       AND expires_at IS NOT NULL AND expires_at <= NOW()
+     ORDER BY expires_at
+     LIMIT ?`,
+    [limit]
+  )
+  return rows.map((row) => ({
+    id: row.id,
+    storagePrefix: row.storagePrefix,
+    keepOriginal: row.keepOriginal === 'S',
+  }))
+}

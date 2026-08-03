@@ -39,6 +39,10 @@ export const InterfaceKeys = {
   LEGAL_JURISDICTIONS: 'legal_jurisdictions',
   LEGAL_CAPABILITIES: 'legal_capabilities',
   LEGAL_RULES: 'legal_rules',
+  /** kind 'R' resources (decision 130 — migration 029): reviewing evidence
+   *  derivatives vs seeing the reporter-reidentifying EXIF original. */
+  MEDIA_EVIDENCE: 'media_evidence',
+  MEDIA_ORIGINAL: 'media_original',
 } as const
 
 export type InterfaceKey = (typeof InterfaceKeys)[keyof typeof InterfaceKeys]

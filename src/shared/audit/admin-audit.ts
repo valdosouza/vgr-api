@@ -14,7 +14,10 @@ import logger from '@shared/logger/logger'
  * context into the domain for no gain.
  */
 
-export type AuditAction = 'create' | 'update' | 'delete' | 'grant' | 'state_change'
+/** 'read' exists for evidence media only (decision 130 / plan M3): every
+ *  panel look at a reporter's image leaves a row — mutating endpoints keep
+ *  using the other actions. */
+export type AuditAction = 'create' | 'update' | 'delete' | 'grant' | 'state_change' | 'read'
 
 /** Decision 110: no secret ever reaches a log — this table included. */
 function sanitize(value: unknown): unknown {

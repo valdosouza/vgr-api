@@ -11,6 +11,7 @@ import privilegeRoutes from '@modules/privileges/privilege.routes'
 import interfaceRoutes from '@modules/interfaces/interface.routes'
 import systemModuleRoutes from '@modules/system-modules/system-module.routes'
 import userRoutes from '@modules/users/user.routes'
+import mediaAdminRoutes from '@modules/media/media-admin.routes'
 
 /**
  * Central router — every module is mounted here at /api/<module>,
@@ -42,5 +43,9 @@ router.post('/auth/renew', renew)
 // Legal Gate administration (decisions 103-109) — the gate itself lives in
 // @shared/legal and is consumed via requireCapability / assertCapability.
 router.use('/legal-policy', legalPolicyRoutes)
+
+// Panel reads of evidence media (M3, decisions 126-131) — every served
+// image leaves an audit row; the EXIF original needs a second grant.
+router.use('/media', mediaAdminRoutes)
 
 export default router

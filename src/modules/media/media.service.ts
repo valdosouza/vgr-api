@@ -148,3 +148,29 @@ export async function openVariant(
   if (!blob) throw notFound()
   return { data: openBlob(unwrapDek(media.dekWrapped), blob), mime: media.mime }
 }
+
+/**
+ * Panel read (M3, decision 130) — privilege and audit live at the route/
+ * controller; this enforces what even a privileged reader can reach:
+ * blocked media IS readable (a moderation hold preserves evidence for an
+ * authority — that is its purpose), shredded media is gone, and the EXIF
+ * original only exists when the reporter chose to keep it.
+ */
+export async function openVariantForPanel(
+  publicId: string,
+  variant: MediaVariant
+): Promise<{ data: Buffer; mime: string }> {
+  const notFound = () => new HttpError(404, 'Media not found', undefined, ErrorCodes.NOT_FOUND)
+
+  const media = await repository.findByPublicId(publicId)
+  if (!media || !media.dekWrapped) throw notFound()
+  if (media.status !== 'available' && media.status !== 'blocked') throw notFound()
+  if (variant === 'original' && !media.keepOriginal) throw notFound()
+
+  const blob = await blobStore().get(keyOf(media.storagePrefix, variant))
+  if (!blob) throw notFound()
+  return {
+    data: openBlob(unwrapDek(media.dekWrapped), blob),
+    mime: variant === 'original' ? media.mimeOriginal : media.mime,
+  }
+}

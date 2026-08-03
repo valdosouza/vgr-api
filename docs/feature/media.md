@@ -1,9 +1,10 @@
-# Media (images) — M1 foundation
+# Media (images) — M1 foundation + M3 retention/panel
 
 Decisions 126–132 (`AI/docs/decisions/VGR-plano.md`); strategy in
-`AI/docs/plans/plano-imagens.md`. M1 ships the foundation: ingest pipeline,
-encrypted storage behind a port, and the app-plane routes. Report
-integration (M2) and retention jobs / panel access (M3) are NOT built.
+`AI/docs/plans/plano-imagens.md`. M1 ships the foundation (ingest pipeline,
+encrypted storage behind a port, app-plane routes); M3 ships retention
+(scheduler + crypto-shredding job) and audited panel reads. Report
+integration (M2) is NOT built — it waits for the report module.
 
 ## Routes (app plane, mounted at `/app-media` — outside `/api`)
 
@@ -67,9 +68,44 @@ index; nothing scans storage.
 (10 MB default), `MEDIA_MAX_PER_REPORT` (10 — enforced in M2 when reports
 reference media), `AVATAR_ENABLED` (decision 127, default off).
 
+## Panel reads (M3 — mounted at `/api/media`, behind authMiddleware)
+
+`GET /api/media/:publicId/:variant?` with stacked kind-'R' guards
+(migration 029, decision 93 mechanism):
+
+- `media_evidence` (VIEW) — derivatives of ANY media (anonymous-owned and
+  `blocked` included: a moderation hold preserves evidence for authority).
+  Bootstrap: de-facto admins (UPDATE on Users), pattern of 020/021/022.
+- `media_original` (VIEW) — the EXIF original, ONLY when the reporter chose
+  `keepOriginal` (decision 130). **No bootstrap: granted to nobody until a
+  human explicitly grants it** — the original is reporter-reidentifying
+  data (asset #1). Served with the original mime, byte-exact.
+
+Every served read writes `tb_admin_audit` (action `read`, entity `media`,
+variant in the summary — decision 116 extended to reads for evidence).
+`Cache-Control: no-store` on the panel: a cached view would be an
+unaudited view.
+
+## Retention (M3 — decisions 90/131)
+
+`gateway/scheduler.ts` (first scheduled work in the API, mechanism of
+decision 90): node-cron in-process, never under NODE_ENV=test, started by
+server.ts only after migrations, and single-instance via MySQL
+`GET_LOCK` on a dedicated connection (`shared/db/job-lock.ts`).
+
+`media-expiry.job.ts` (hourly): rows with `expires_at <= NOW()` and
+`frozen='N'` are **crypto-shredded first** (`dek_wrapped = NULL` — the
+security boundary; objects become unrecoverable noise, backups included),
+then the storage objects are deleted best-effort. `expires_at` gets
+stamped by M2 when the owning case resolves (90 days — decision 131);
+`frozen='S'` (case with an authority) is never selected.
+
 ## Tests
 
 `media-pipeline.spec` (EXIF stripped, format, caps, blur≠thumb),
 `media.service.spec` (ciphertext on disk, decision-127/129/130 rules,
 owner-only reads), `media.routes.spec` (anonymous multipart end-to-end),
-`media-cipher.spec`, `sigv4.spec` (AWS vector), `fs-blob-store.spec`.
+`media-cipher.spec`, `sigv4.spec` (AWS vector), `fs-blob-store.spec`,
+`media-admin.routes.spec` (stacked grants, audit row, blocked readable,
+original byte-exact with EXIF), `media-expiry.job.spec` (shred-first,
+batch drain), `job-lock.spec`, `scheduler.spec`.

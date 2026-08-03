@@ -3,6 +3,7 @@ import * as service from '@modules/media/media.service'
 import { mediaVariantDto, uploadMediaDto } from '@modules/media/media.dto'
 import { handleError, parseBody } from '@shared/http/controller-utils'
 import { ErrorCodes } from '@shared/errors/error-codes'
+import { auditFromRequest } from '@shared/audit/admin-audit'
 
 export async function upload(req: Request, res: Response): Promise<void> {
   try {
@@ -51,5 +52,25 @@ export async function stream(req: Request, res: Response): Promise<void> {
     res.send(data)
   } catch (err) {
     handleError(res, err, 'media.stream')
+  }
+}
+
+/** Panel plane (M3): every served read leaves an audit row — who saw
+ *  which image of which case (decisions 116/130). */
+export async function adminStream(req: Request, res: Response): Promise<void> {
+  try {
+    const variant = mediaVariantDto.safeParse(req.params.variant ?? 'normalized')
+    if (!variant.success) {
+      res.status(404).json({ error: 'Media not found', code: ErrorCodes.NOT_FOUND })
+      return
+    }
+    const { data, mime } = await service.openVariantForPanel(req.params.publicId, variant.data)
+    auditFromRequest(req, 'read', 'media', req.params.publicId, { variant: variant.data })
+    res.setHeader('Content-Type', mime)
+    // No caching on the panel: a cached view would be an unaudited view.
+    res.setHeader('Cache-Control', 'no-store')
+    res.send(data)
+  } catch (err) {
+    handleError(res, err, 'media.adminStream')
   }
 }

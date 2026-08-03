@@ -2,6 +2,7 @@ import app from './app'
 import logger from '@shared/logger/logger'
 import { runMigrations } from './migrations/runner'
 import { assertRequiredEnv } from '@shared/config/env'
+import { startScheduler } from '@gateway/scheduler'
 
 const PORT = process.env.PORT ?? 3000
 
@@ -17,6 +18,9 @@ async function bootstrap() {
     app.listen(PORT, () => {
       logger.info(`VGR API running on port ${PORT}`)
     })
+
+    // After migrations, never during them (decision 90).
+    startScheduler()
   } catch (err) {
     logger.error('Startup failed', { err })
     process.exit(1)
