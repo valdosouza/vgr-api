@@ -19,7 +19,7 @@ jest.mock('@shared/acl/session-store', () => ({
 const mockedAcl = aclStore as jest.Mocked<typeof aclStore>
 
 function tokenFor(role: string): string {
-  return jwt.sign({ userId: role === 'admin' ? 1 : 2, role, sv: 1 }, process.env.JWT_SECRET ?? 'test-secret')
+  return jwt.sign({ userId: role === 'admin' ? 1 : 2, role, sv: 1 }, process.env.JWT_SECRET ?? 'test-secret', { audience: 'admin' })
 }
 
 describe('GET /api/risk-config', () => {

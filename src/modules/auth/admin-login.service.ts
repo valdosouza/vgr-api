@@ -5,6 +5,7 @@ import { invalidateSession } from '@shared/acl/session-store'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
 import { jwtSecret } from '@shared/config/env'
+import { Audiences } from '@shared/auth/audience'
 import { decryptEnvelope } from '@shared/crypto/envelope'
 import { computeLoginDelayMs, sleep } from '@shared/security/login-delay'
 import { verifyTotp } from '@shared/security/totp'
@@ -20,8 +21,11 @@ export function signSession(userId: number, sessionVersion: number): string {
   // the user can actually do is decided per privilege by requirePrivilege
   // (decisions 70/72), never by this field. TTL 15m (decision 112); `sv`
   // ties the token to tb_user.session_version — bump it and every
-  // outstanding token dies within the session-store cache TTL.
+  // outstanding token dies within the session-store cache TTL. `aud`
+  // pins the token to the panel plane (decision 119): it is a 401 on any
+  // app-plane route, and app tokens are a 401 here.
   return jwt.sign({ userId, role: 'admin', sv: sessionVersion }, jwtSecret(), {
+    audience: Audiences.ADMIN,
     expiresIn: (process.env.JWT_EXPIRES_IN ?? '15m') as jwt.SignOptions['expiresIn'],
   })
 }

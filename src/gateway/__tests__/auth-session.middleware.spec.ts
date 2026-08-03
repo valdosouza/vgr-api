@@ -15,7 +15,7 @@ function makeRes(): Response {
 }
 
 function reqWithToken(payload: object): Request {
-  const token = jwt.sign(payload, 'test-secret')
+  const token = jwt.sign(payload, 'test-secret', { audience: 'admin' })
   return { headers: { authorization: `Bearer ${token}` } } as unknown as Request
 }
 

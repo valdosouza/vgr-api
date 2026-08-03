@@ -9,6 +9,7 @@ import { authMiddleware } from '@gateway/auth.middleware'
 import { authRateLimitMiddleware, rateLimitMiddleware } from '@gateway/rate-limit.middleware'
 import apiRouter from '@gateway/router'
 import adminLoginRoutes from '@modules/auth/admin-login.routes'
+import appAuthRoutes from '@modules/accounts/account.routes'
 import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -88,6 +89,11 @@ app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOStri
 // Public — issues the JWT itself, so it must run before authMiddleware
 // (decision 67). Rate-limited harder than /api: brute-force target.
 app.use('/auth', authRateLimitMiddleware, adminLoginRoutes)
+
+// App plane (decision 119): a separate authentication system with its own
+// audience, deliberately NOT under /api — panel tokens are rejected here
+// and app tokens are rejected there.
+app.use('/app-auth', authRateLimitMiddleware, appAuthRoutes)
 
 // JWT auth on all /api routes (public routes, e.g. listing anonymous
 // reports, go BEFORE this line once they exist — scope-refinement will

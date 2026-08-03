@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import { AuthenticatedUser } from '@shared/types/express'
 import { getSessionInfo } from '@shared/acl/session-store'
+import { Audiences } from '@shared/auth/audience'
 import { jwtSecret } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -35,7 +36,11 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   const token = header.slice('Bearer '.length)
   let payload: AuthenticatedUser
   try {
-    payload = jwt.verify(token, secret) as AuthenticatedUser
+    // `audience` is enforced by verify: an app-plane token is rejected
+    // here, and a panel token is rejected on the app routes (decision 119).
+    payload = jwt.verify(token, secret, {
+      audience: Audiences.ADMIN,
+    }) as AuthenticatedUser
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' })
     return

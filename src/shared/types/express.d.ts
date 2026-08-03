@@ -14,7 +14,11 @@ export interface AuthenticatedUser {
 declare global {
   namespace Express {
     interface Request {
+      /** Panel plane (tb_user) — set by authMiddleware. */
       user?: AuthenticatedUser
+      /** App plane (tb_user_account) — set by appAuthMiddleware. The two
+       *  are never both set: the planes are cross-rejected (decision 119). */
+      appAccountId?: number
     }
   }
 }
