@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS tb_fee_rule (
+  category              VARCHAR(50) NOT NULL PRIMARY KEY,
+  fee_percent           DECIMAL(5,2) NOT NULL DEFAULT 0,
+  payment_mode_allowed  JSON NOT NULL,
+  created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

@@ -58,7 +58,10 @@ export function parseBody<S extends z.ZodTypeAny>(
 ): z.infer<S> | null {
   const parsed = schema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({
+    // 422, not 400 (amended per docs/specs/vgr/004-api-test-scenarios.md,
+    // which consistently expects 422 for semantic validation failures —
+    // this file predates that spec and originally used 400).
+    res.status(422).json({
       error: 'Validation failed',
       code: ErrorCodes.VALIDATION_FAILED,
       fields: zodToFields(parsed.error),

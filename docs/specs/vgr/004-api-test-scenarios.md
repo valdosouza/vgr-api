@@ -52,6 +52,45 @@
 - [ ] Should be immutable after creation
 - [ ] Should never be serializable through any DTO used by a controller (structural check)
 
+**AdminAccount** (amendment, task 33, decision 67)
+- [ ] Should authenticate successfully when the password matches the stored bcrypt hash
+- [ ] Should reject authentication when the password doesn't match
+- [ ] Should never expose passwordHash through any DTO used by a controller (structural check, mirrors AccountabilityLogEntry)
+
+**RiskTierConfig**
+- [ ] Should create successfully for any Category with tier one of low/medium/high
+- [ ] Should be readable from cache without a query on every request (TTL-cached, decision 46)
+
+**CategoryFormSchema**
+- [ ] Should create successfully with a non-empty field list for a Category
+- [ ] Should reject a submitted Report's detail fields that don't match the current schema
+
+**FeeRule** (amendment, task 32 — see `003-api-tactical-design.md` task 32's note)
+- [ ] Should create successfully for a specific Category or for the global default (category=null)
+- [ ] Should be readable from cache without a query on every request (TTL-cached, mirrors decision 46's pattern)
+- [ ] Should fall back to the global default rule when the requested Category has no rule of its own
+
+**HelperRating**
+- [ ] Should persist against the Helper's internal id even when the Helper was anonymous to the Reporter
+- [ ] Should reject a second rating on the same HelpOffer from the same Reporter
+
+**PanicAlert**
+- [ ] Should reject trigger() when recipients resolves to an empty set even after defaulting to the responder pool
+- [ ] Should accept trigger() with only a trusted contact configured, no pool membership required
+
+**ChatThread**
+- [ ] Should resolve every participant through MaskedIdentity before persisting a message — never a raw UserId
+- [ ] Should generate a distinct MaskedIdentity token per (ChatThread, UserId) pair, never reused across Reports
+
+**PaymentIntent**
+- [ ] Should reject confirm() with mode=peer_to_peer when the Report's RiskTierConfig is high
+- [ ] Should accept confirm() with mode=peer_to_peer when the Report's RiskTierConfig is low or medium
+
+**DualControlAccessRequest**
+- [ ] Should remain ungrantable with only 1 recorded approverId, even with a valid legalBasis
+- [ ] Should reject recording the same approverId twice toward the 2-approver threshold
+- [ ] Should become grantable only when 2 distinct approverIds and a non-empty legalBasis are present
+
 ### 1.2 Value Objects
 
 **Category / FreeTag**
@@ -130,6 +169,26 @@
 - [ ] Should append an entry for every anonymous Report/HelpOffer submission
 - [ ] Should never be queryable through any repository method used by a public-facing controller
 
+**RiskTierConfigRepository**
+- [ ] Should persist an admin's tier update and reflect it after the next TTL cache refresh
+- [ ] Should return the configured tier, not a default, for a Category that was explicitly set
+
+**FeeRuleRepository** (amendment, task 32)
+- [ ] Should persist an admin's feePercent/paymentModeAllowed update and reflect it after the next TTL cache refresh
+- [ ] Should return the Category-specific rule, not the global one, when both exist for that Category
+
+**ResponderPoolRepository**
+- [ ] Should return only actively approved members when queried for panic-alert routing
+- [ ] Should exclude a denied or revoked membership from the active members list
+
+**PanicAlertRepository / ChatThreadRepository / PaymentIntentRepository**
+- [ ] Should persist a PanicAlert with its resolved recipient list intact
+- [ ] Should find-or-create exactly one ChatThread per (reportId, helperId) pair, never duplicating on repeated calls
+- [ ] Should persist a PaymentIntent's mode and confirmation state accurately
+
+**DualControlAccessRepository**
+- [ ] Should append each approval attempt (granted or denied) permanently, including both approver identities on grant
+
 ### 2.2 Use Cases
 
 **SubmitReport → ReportRepository**
@@ -152,6 +211,26 @@
 - [ ] Should execute AuthenticateWithProvider → provider token verified → UserAccount upserted → UserAuthenticated emitted → JWT issued, for each of Google, Apple, Facebook
 - [ ] Should reject before any persistence when the provider token fails verification
 - [ ] Should execute the OTP variant → code verified against a non-expired, unused record → JWT issued
+
+**TriggerPanicAlert → PanicAlertRepository**
+- [ ] Should execute TriggerPanicAlert → recipients resolved (config or default pool) → PanicAlertTriggered emitted → persisted
+- [ ] Should execute end-to-end for a cold trigger (no prior configuration) and still resolve to the responder pool
+
+**ProcessRewardPayment → PaymentIntentRepository**
+- [ ] Should execute ProcessRewardPayment → RiskTier checked → intermediated path taken → PaymentIntentConfirmed emitted, for a high-tier Report
+- [ ] Should reject before any persistence when a peer_to_peer PaymentIntent is attempted on a high-tier Report
+
+**RequestDualControlAccess → DualControlAccessRepository**
+- [ ] Should execute the full 2-approval sequence → DualControlAccessGranted emitted only after the second distinct approval
+
+**AdminLogin → AdminAccountRepository** (amendment, task 33, decision 67)
+- [ ] Should execute AdminLogin → credentials verified against AdminAccountRepository → JWT issued with role=admin
+- [ ] Should reject before issuing a JWT when the email doesn't match any AdminAccount
+
+**RequestResponderAuthorization / ApproveResponderAuthorization → ResponderPoolRepository** (amendment, task 27 — these two use cases were listed in `003-api-tactical-design.md`'s Use Case Catalog but had no GWT coverage here; adding it rather than inventing untracked test cases)
+- [ ] Should execute RequestResponderAuthorization → ResponderPoolMembership created with status=pending → persisted, regardless of caller Role
+- [ ] Should execute ApproveResponderAuthorization(approved: true) → membership status transitions to approved → persisted, becomes visible to `findActiveMembers`
+- [ ] Should execute ApproveResponderAuthorization(approved: false) → membership status transitions to denied → persisted, excluded from `findActiveMembers`
 
 ### 2.3 External Integrations
 
@@ -201,6 +280,46 @@
   - When: `POST /auth/login/otp/verify` is called with the correct, non-expired code
   - Then: response is 200 with `{ jwt }`
 
+- [ ] **Should issue a JWT when an admin logs in with the correct email/password** (amendment, task 33, decision 67)
+  - Given: a seeded AdminAccount
+  - When: `POST /auth/admin-login` is called with `{ email, password }`
+  - Then: response is 200 with `{ jwt }` decodable to `{ userId, role: "admin" }`
+
+- [ ] **Should hide real-time engagement signals from the Reporter on a high-tier Report**
+  - Given: a Report whose Category has RiskTierConfig=high, with 2 HelpOffers submitted in the last minute
+  - When: the Reporter calls `GET /api/reports/:id`
+  - Then: response omits per-HelpOffer timestamps/counts in real time (decision 41)
+
+- [ ] **Should let an admin update a Category's RiskTier without a deploy**
+  - Given: an authenticated admin
+  - When: `PUT /api/risk-config/:category` is called with `{ tier: "high" }`
+  - Then: response is 200; subsequent Report submissions in that Category enforce mandatory anonymity and hidden engagement
+
+- [ ] **Should let an admin set a Category's fee rule, falling back to the global default when unset** (amendment, task 32)
+  - Given: an authenticated admin, and a Category with no fee rule of its own yet
+  - When: `GET /api/monetization-config/:category` is called, then `PUT /api/monetization-config/:category` with `{ feePercent: 5, paymentModeAllowed: ["intermediated"] }`, then `GET` again
+  - Then: the first response reflects the global default; the third reflects the Category-specific override, without a deploy
+
+- [ ] **Should restrict a Resolved Report's detail to participants only**
+  - Given: a Resolved Report with 1 linked HelpOffer, and a caller with no HelpOffer on it
+  - When: that caller calls `GET /api/reports/:id`
+  - Then: response contains only the closure status, no timeline/ratings (decision 50)
+
+- [ ] **Should let a user request Authorized Responder status and an admin approve it** (amendment, task 27 — same gap as noted in section 2.2)
+  - Given: an authenticated user with no existing ResponderPoolMembership
+  - When: `POST /api/panic/responder-pool` is called by that user, then `PUT /api/panic/responder-pool/:id/resolve` with `{ approved: true }` is called by an admin
+  - Then: the first response is 201 with status=pending; the second is 200 and the membership no longer appears in the admin's pending list
+
+- [ ] **Should trigger a panic alert and resolve to the responder pool when unconfigured**
+  - Given: a user with no PanicAlert configuration saved
+  - When: `POST /api/panic/trigger` is called
+  - Then: response is 201; PanicAlertTriggered is emitted with the active responder pool as recipients (decision 65)
+
+- [ ] **Should post and retrieve masked chat messages on a Report's thread**
+  - Given: an existing Report with a HelpOffer from Helper H
+  - When: `POST /api/chat/:reportId/messages` is called by H, then `GET /api/chat/:reportId/messages` by the Reporter
+  - Then: the Reporter's response shows H's message under a MaskedIdentity token, never H's raw UserId
+
 ### 3.2 Alternative and Error Flows
 
 - [ ] Should return 403 when a Helper who is also the Report's Reporter attempts to submit a HelpOffer on their own Report
@@ -210,8 +329,12 @@
 - [ ] Should return 409 when attempting to resolve() a Report that is already Resolved
 - [ ] Should return 401 when `/auth/login` is called with an invalid or expired provider token
 - [ ] Should return 401 when the OTP code is wrong, expired, or already used
+- [ ] Should return 401 with the same message for a wrong password and for an unknown email on `POST /auth/admin-login` (amendment, task 33 — never reveal which one was wrong)
 - [ ] Should return 422 when a non-registered (anonymous) Reporter attempts `POST /api/rewards` to offer a Reward (decision 33)
 - [ ] Should return 409 when attempting to revoke() a Reward after a qualifying HelpOffer already exists (decision 30)
+- [ ] Should return 422 when a PaymentIntent with mode=peer_to_peer is requested for a high-tier Report (decision 58)
+- [ ] Should return 403 when a non-admin caller attempts any `/api/risk-config/*`, `/api/category-forms/*`, `/api/dual-control-access/*`, `/api/monetization-config/*` (amendment, task 32), or admin-only `/api/panic/responder-pool/*` endpoint (list/resolve — request stays open to any authenticated Role)
+- [ ] Should return 409 when a second approval attempt on `/api/dual-control-access/:id` reuses an approverId already recorded on that request
 
 ### 3.3 Security Scenarios
 
@@ -222,6 +345,9 @@
 - [ ] Should apply Brazilian jurisdiction rules regardless of the request's originating location/IP (decision 24) — no geo-adaptive behavior branch exists
 - [ ] Should rate-limit OTP request attempts per phone number to prevent SMS/WhatsApp abuse
 - [ ] Should never log or return the raw OTP code in any response, error, or log line other than the delivery channel itself
+- [ ] Should never resolve a MaskedIdentity token back to a raw UserId through any endpoint reachable by a Reporter or another Helper
+- [ ] Should grant AccountabilityLogEntry decryption only with a logged legalBasis and 2 distinct admin approverIds — never with 1, never with a duplicated approver
+- [ ] Should exclude FeeRuleEntity and RiskTierConfig write endpoints from any Role other than admin, including a valid but non-admin JWT
 
 ## Save
 

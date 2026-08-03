@@ -14,6 +14,16 @@
 | UserIdentity | Aggregate Root | Role transitions: none→reporter/helper always allowed; →police only via validation (deferred) | *see below* |
 | AccountabilityLogEntry | Aggregate Root (append-only) | Immutable once written; never exposed to end users | *see below* |
 | UserAccount | Aggregate Root | Jurisdiction always `BR` in MVP (decision 24); consent required before registration completes | *see below* |
+| RiskTierConfig | Aggregate Root (Admin Configuration) | One row per Category; admin-editable at runtime, cached with TTL (mirrors `tb_feature_flag`, decision 46) | *see below* |
+| CategoryFormSchema | Aggregate Root (Admin Configuration) | Admin-editable per-Category field schema (decision 47); never hardcoded per category | *see below* |
+| HelperRating | Aggregate Root (Identity & Trust) | Accumulates on Helper's internal identity; never exposes raw identity to the rater (decision 48) | *see below* |
+| PanicAlert | Aggregate Root (Panic Alert) | Must resolve to ≥1 recipient (pool and/or personal contact) before being considered sent (decisions 63-65) | *see below* |
+| ResponderPoolMembership | Aggregate Root (Panic Alert) | Only created via admin approval; criteria still pending (decision 52) | *see below* |
+| ChatThread | Aggregate Root (Messaging) | Exists only in the context of one Report + one HelperId pair; masks identity per RiskTierConfig (decisions 54, 60) | *see below* |
+| PaymentIntent | Aggregate Root (Payment Intermediation) | Mode `intermediated` \| `peer_to_peer`; `peer_to_peer` rejected outright when RiskTierConfig marks the Report high-risk (decision 58) | *see below* |
+| DualControlAccessRequest | Aggregate Root (Admin Configuration) | Requires 2 distinct admin approvals + a logged legal basis before granting decryption (decision 45) | *see below* |
+| FeeRule | Aggregate Root (Admin Configuration) | Amendment (task 32) — `003-admin-tactical-design.md` specifies `FeeRuleEntity`/`FeeRuleRepository` (admin task 07) but no API-side task or repository ever existed for it; category nullable = global default, admin-editable, cached with TTL (mirrors `RiskTierConfig`, decisions 39/58) | *see below* |
+| AdminAccount | Aggregate Root (Admin Authentication) | Amendment (task 33, decision 67) — email + bcrypt password hash; no self-registration, only seeded/created manually; issues the same JWT shape (`{userId, role}`) as every other authenticated route | *see below* |
 
 ```ts
 class Report {
@@ -40,6 +50,30 @@ class Reward {
   revoke(): void // throws RewardAlreadyFulfilledError if any qualifying HelpOffer already exists (CC art. 856)
 }
 ```
+```ts
+class RiskTierConfig {
+  category: Category; tier: 'low' | 'medium' | 'high'
+  // 'high' forces: mandatory anonymity toward other users, hidden real-time engagement, intermediated-only payment
+}
+```
+```ts
+class PanicAlert {
+  id: PanicAlertId; triggeredBy: UserId; recipients: AlertRecipient[]
+  trigger(): void // throws NoRecipientConfiguredError if recipients.length === 0 after defaulting to the responder pool
+}
+```
+```ts
+class ChatThread {
+  id: ChatThreadId; reportId: ReportId; participantMask: Map<UserId, MaskedIdentity>
+  postMessage(from: UserId, text: string): ChatMessage // resolves `from` through participantMask before persisting
+}
+```
+```ts
+class PaymentIntent {
+  id: PaymentIntentId; rewardId: RewardId; mode: 'intermediated' | 'peer_to_peer'
+  confirm(): void // throws PeerToPeerNotAllowedError if mode==='peer_to_peer' and RiskTierConfig.tier==='high'
+}
+```
 
 ## Section 2 — Value Objects / Types / Interfaces
 
@@ -53,11 +87,17 @@ class Reward {
 | Direction | Direction Sighting Aggregation | Compass point enum (N/S/E/W/NE/NW/SE/SW) | *see below* |
 | SightingWeight | Direction Sighting Aggregation | Float 0–1; lower for anonymous helper (decision 27) | *see below* |
 | RewardOffer | Reward & Incentives | Discriminated union: money \| perk \| reciprocity \| none (decision 1) | *see below* |
-| Role | Identity & Trust | Enum: anonymous \| reporter \| helper \| police (decision 4) | *see below* |
+| Role | Identity & Trust | Enum: anonymous \| reporter \| helper \| police \| admin — `admin` amended in: decision 4 only covered citizen-facing roles, but decision 56 (admin panel) and every admin-config task (22, 27, 31...) require a platform-administrator role that was never reconciled into this enum until now | *see below* |
 | AnonymityMode | Identity & Trust | Enum: anonymous \| identified-no-reward \| identified-with-reward (decision 6) | *see below* |
 | Jurisdiction | User Registration & Compliance | Fixed `BR` for MVP (decision 24) | *see below* |
 | GeoPosition | Geolocation Primitives | Valid lat/lng pair | *see below* |
-| LoginProvider | User Registration & Compliance | Enum: google \| apple \| facebook \| phone_otp *(phone_otp pending confirmation, decision 31)* | *see below* |
+| LoginProvider | User Registration & Compliance | Enum: google \| apple \| facebook \| phone_otp — all four confirmed (decision 31) | *see below* |
+| RiskTier | Admin Configuration | Enum: low \| medium \| high; sourced from RiskTierConfig, never hardcoded (decision 46) | *see below* |
+| HelpTypeFieldSchema | Admin Configuration | JSON schema per Category (decision 47); validated server-side before accepting a Report's detail fields | *see below* |
+| RatingScore | Identity & Trust | Int 1–5; attaches to HelperRating, never to a public-facing Helper profile | *see below* |
+| AlertRecipient | Panic Alert | Discriminated union: responder_pool \| trusted_contact (decision 64) | *see below* |
+| PaymentMode | Payment Intermediation | Enum: intermediated \| peer_to_peer; `peer_to_peer` invalid when RiskTier=high (decision 58) | *see below* |
+| MaskedIdentity | Messaging | Opaque per-thread token; never resolves back to UserId outside Identity & Trust (decision 54, 55) | *see below* |
 
 ```ts
 class Category {
@@ -81,8 +121,24 @@ class AnonymityMode {
 }
 ```
 ```ts
+class Role {
+  value: 'anonymous'|'reporter'|'helper'|'police'|'admin'
+  // 'admin' never participates in AnonymityMode/Report flows — gates admin-config endpoints only
+}
+```
+```ts
 class LoginProvider {
   value: 'google'|'apple'|'facebook'|'phone_otp' // frictionless-first, decision 31
+}
+```
+```ts
+class RiskTier {
+  value: 'low'|'medium'|'high' // resolved from RiskTierConfig at read time, never cached in Report itself
+}
+```
+```ts
+class MaskedIdentity {
+  token: string // opaque per-(ChatThread,UserId) pair; regenerated per thread, never reused across Reports
 }
 ```
 
@@ -104,6 +160,16 @@ class LoginProvider {
 | RegisterAnonymousActivity | Logs IP/metadata for an anonymous actor without exposing it (decision 23) | AccountabilityLogEntry | *see below* |
 | CompleteRegistration | Registers a UserAccount, records consent, fixes Jurisdiction=BR (decision 8, 24) | UserAccount, ConsentRecord | *see below* |
 | QueueOfflineSubmission | Persists a Report/Sighting draft for later dispatch (decision 28) | Report or DirectionSighting (deferred write) | *see below* |
+| ConfigureRiskTier | Admin sets/updates the RiskTier for a Category (decision 46) | RiskTierConfig | *see below* |
+| ConfigureCategoryFormSchema | Admin sets/updates the detail-field schema for a Category (decision 47) | CategoryFormSchema | *see below* |
+| GetReportVisibility | Restricts a Resolved Report's detail/timeline/ratings to participants only (decision 50) | Report, HelpOffer | *see below* |
+| RateHelper | Reporter rates a Helper at Report finalization (decision 48) | HelperRating, UserIdentity | *see below* |
+| RequestResponderAuthorization | User applies to join the Authorized Responder pool | ResponderPoolMembership | *see below* |
+| ApproveResponderAuthorization | Admin approves/denies a pool application (decision 52 — criteria pending) | ResponderPoolMembership | *see below* |
+| TriggerPanicAlert | Fires an alert to the configured or default recipients, with continuous geolocation (decisions 62-65) | PanicAlert, AlertRecipient, GeoPosition | *see below* |
+| PostChatMessage | Sends a masked message on a Report's ChatThread (decision 54) | ChatThread, MaskedIdentity | *see below* |
+| ProcessRewardPayment | Routes an allocated Reward through the PSP (intermediated) or clears it for direct settlement (peer-to-peer), enforcing decision 58's RiskTier constraint | PaymentIntent, Reward, RiskTierConfig | *see below* |
+| RequestDualControlAccess | Requests decryption of AccountabilityLogEntry data, requiring legal basis + 2 admin approvals (decision 45) | DualControlAccessRequest, AccountabilityLogEntry | *see below* |
 
 ```ts
 function calculateDynamicRadius(category: Category): DynamicRadius {
@@ -130,6 +196,26 @@ function authenticateWithProvider(provider: LoginProvider, token: string): Promi
   // verifies token with provider SDK, upserts UserAccount, issues session JWT (decision 31)
 }
 ```
+```ts
+function getReportVisibility(report: Report, viewerId: UserId): ReportView {
+  // full view (timeline, ratings) only if viewerId has a HelpOffer on report; else summary-only (decision 50)
+}
+```
+```ts
+function triggerPanicAlert(userId: UserId, config?: AlertRecipient[]): PanicAlert {
+  // config ?? [defaultResponderPool()] — never resolves to zero recipients (decision 63-65)
+}
+```
+```ts
+function processRewardPayment(intent: PaymentIntent, tier: RiskTier): void {
+  // throws PeerToPeerNotAllowedError if intent.mode==='peer_to_peer' && tier==='high' (decision 58)
+}
+```
+```ts
+function requestDualControlAccess(req: DualControlAccessRequest): void {
+  // throws InsufficientApprovalError unless 2 distinct adminIds + a legalBasis are recorded (decision 45)
+}
+```
 
 ## Section 4 — Events / Messages / Async Flows
 
@@ -143,6 +229,13 @@ function authenticateWithProvider(provider: LoginProvider, token: string): Promi
 | RewardOffered | OfferReward succeeds | `{ rewardId, reportId, offer }` | ReportManagement (timeline, opaque ref only) |
 | RewardAllocated | AllocateReward succeeds | `{ rewardId, claimIds[] }` | none (terminal) |
 | UserAuthenticated | AuthenticateWithProvider succeeds | `{ userId, provider, authenticatedAt }` | AccountabilityLog (audit trail) |
+| RiskTierConfigured | ConfigureRiskTier succeeds | `{ category, tier, configuredBy }` | ReportManagement, HelpMatching, Reward (cache invalidation) |
+| HelperRated | RateHelper succeeds | `{ ratingId, reportId, helperInternalId, score }` | Identity & Trust (reputation accumulation) |
+| ResponderPoolMembershipApproved | ApproveResponderAuthorization succeeds | `{ userId, approvedBy, approvedAt }` | PanicAlert (recipient pool) |
+| PanicAlertTriggered | TriggerPanicAlert succeeds | `{ alertId, triggeredBy, recipients[], position }` | Notification delivery (out of MVP scope beyond in-app) |
+| ChatMessagePosted | PostChatMessage succeeds | `{ threadId, maskedSenderToken, sentAt }` | ChatThread participants |
+| PaymentIntentConfirmed | ProcessRewardPayment succeeds | `{ intentId, rewardId, mode, feeRetained? }` | Reward (marks payout complete) |
+| DualControlAccessGranted | RequestDualControlAccess succeeds | `{ requestId, approverIds[], legalBasis }` | AccountabilityLog (audit trail, permanent) |
 
 ## Section 5 — Persistence / Repository Interfaces
 
@@ -155,6 +248,16 @@ function authenticateWithProvider(provider: LoginProvider, token: string): Promi
 | UserIdentityRepository | findById, save | `UserIdentity`, `void` |
 | AccountabilityLogRepository | append, findByActor *(internal-only, never exposed via API)* | `void`, `AccountabilityLogEntry[]` |
 | UserAccountRepository | create, findById, findByEmail | `UserAccount` |
+| RiskTierConfigRepository | findByCategory (TTL-cached), upsert | `RiskTierConfig`, `void` |
+| CategoryFormSchemaRepository | findByCategory, upsert | `CategoryFormSchema`, `void` |
+| HelperRatingRepository | create, findByHelperInternalId | `HelperRating`, `HelperRating[]` |
+| ResponderPoolRepository | requestMembership, approve, findActiveMembers | `ResponderPoolMembership` |
+| PanicAlertRepository | create, findById | `PanicAlert` |
+| ChatThreadRepository | findOrCreateByReportAndHelper, appendMessage | `ChatThread`, `ChatMessage` |
+| PaymentIntentRepository | create, findByRewardId, markConfirmed | `PaymentIntent`, `void` |
+| DualControlAccessRepository | create, addApproval, findPending *(internal-only)* | `DualControlAccessRequest` |
+| FeeRuleRepository | findByCategory (TTL-cached, falls back to the global/`null`-category rule), upsert, findAll | `FeeRule`, `void`, `FeeRule[]` |
+| AdminAccountRepository | findByEmail | `AdminAccount` |
 
 ```ts
 interface ReportRepository {
@@ -187,7 +290,19 @@ interface ReportRepository {
   { "id": "18", "title": "Implement /auth/login route for Google, Apple, and Facebook", "description": "Wires the public authentication endpoint (no JWT required to call it) for the three confirmed providers.", "scope": ["src/modules/auth/auth.repository.ts", "src/modules/auth/auth.controller.ts", "src/modules/auth/auth.routes.ts", "src/migrations/sql/007_user_accounts_login_provider.sql"], "acceptance": ["POST /auth/login returns 200 with a JWT for a valid Google/Apple/Facebook token", "Returns 401 for an invalid or expired provider token"], "depends_on": "17" },
   { "id": "19", "title": "Implement phone/WhatsApp OTP login", "description": "Adds the 4th confirmed login method (decision 31) alongside Google/Apple/Facebook.", "scope": ["src/modules/auth/auth.service.ts", "src/modules/auth/auth.routes.ts", "src/modules/auth/__tests__/otp.spec.ts"], "acceptance": ["POST /auth/login/otp/request sends a code and POST /auth/login/otp/verify returns a JWT for a valid code", "Rejects an expired or already-used OTP code"], "depends_on": "18" },
   { "id": "20", "title": "Implement Reward revocation and auto-split allocation (CC arts. 854-860)", "description": "Adds revoke() blocked after a qualifying HelpOffer exists, and default auto-split when multiple Helpers qualify simultaneously (decision 30).", "scope": ["src/modules/rewards/rewards.service.ts", "src/modules/rewards/__tests__/reward-promessa.spec.ts"], "acceptance": ["revoke() throws RewardAlreadyFulfilledError once any qualifying HelpOffer exists", "allocate() splits the reward evenly across all RewardClaims when the Reporter submits more than one claimId without a custom split"], "depends_on": "15" },
-  { "id": "21", "title": "Implement 90-day auto-deletion for Child-tagged Report data", "description": "Schedules deletion of Report data (photos, fields) 90 days after resolution when SubjectTag=Child (decision 25).", "scope": ["src/modules/reports/reports.service.ts", "src/migrations/sql/008_report_retention_job.sql"], "acceptance": ["A Child-tagged Report's sensitive data is purged 90 days after ReportResolved, verified by a scheduled job test with a mocked clock", "Non-Child-tagged Reports are unaffected by this job"], "depends_on": "03" }
+  { "id": "21", "title": "Implement 90-day auto-deletion for Child-tagged Report data", "description": "Schedules deletion of Report data (photos, fields) 90 days after resolution when SubjectTag=Child (decision 25).", "scope": ["src/modules/reports/reports.service.ts", "src/migrations/sql/008_report_retention_job.sql"], "acceptance": ["A Child-tagged Report's sensitive data is purged 90 days after ReportResolved, verified by a scheduled job test with a mocked clock", "Non-Child-tagged Reports are unaffected by this job"], "depends_on": "03" },
+  { "id": "22", "title": "Implement RiskTierConfig registry (admin-managed, TTL-cached)", "description": "Creates the runtime-editable RiskTier-per-Category registry mirroring the tb_feature_flag pattern (decision 46).", "scope": ["src/modules/risk-config/risk-config.interface.ts", "src/modules/risk-config/risk-config.service.ts", "src/modules/risk-config/risk-config.repository.ts", "src/migrations/sql/009_risk_tier_config.sql"], "acceptance": ["Admin can set a Category's tier without a code deploy", "Read path uses the TTL cache, not a query per request"], "depends_on": "01" },
+  { "id": "23", "title": "Implement CategoryFormSchema registry", "description": "Creates the admin-editable per-Category detail-field schema (decision 47).", "scope": ["src/modules/risk-config/category-form-schema.service.ts", "src/migrations/sql/010_category_form_schema.sql"], "acceptance": ["SubmitReport validates detail fields against the Category's current schema", "Adding a new Category's schema requires no code change"], "depends_on": "22" },
+  { "id": "24", "title": "Enforce RiskTier-driven mandatory anonymity and hidden engagement on Report reads", "description": "High-tier Reports hide real-time HelpOffer counts/timestamps from the Reporter and force AnonymityMode for Helpers (decisions 40, 41, 60).", "scope": ["src/modules/reports/reports.service.ts", "src/modules/help-offers/help-offers.service.ts", "src/modules/help-offers/__tests__/high-risk-anonymity.spec.ts"], "acceptance": ["High-tier Report responses never include per-HelpOffer timestamps to the Reporter", "Helper identity stays resolvable only internally (decision 60), never in the Reporter-facing payload"], "depends_on": "22" },
+  { "id": "25", "title": "Implement GetReportVisibility (post-closure access restriction)", "description": "Restricts a Resolved Report's timeline/ratings to participants only (decision 50).", "scope": ["src/modules/reports/report-visibility.service.ts", "src/modules/reports/__tests__/visibility.spec.ts"], "acceptance": ["A user with no HelpOffer on a Resolved Report receives only the closure status", "A linked Helper still sees full timeline and ratings after resolution (decision 18)"], "depends_on": "07" },
+  { "id": "26", "title": "Implement HelperRating aggregate and RateHelper use case", "description": "Lets the Reporter rate Helpers at finalization; rating accumulates on the Helper's internal identity (decision 48).", "scope": ["src/modules/identity/helper-rating.service.ts", "src/modules/identity/helper-rating.repository.ts", "src/migrations/sql/011_helper_rating.sql"], "acceptance": ["Rating persists against the Helper's internal id even when the Helper was anonymous to the Reporter", "Reporter cannot rate the same HelpOffer twice"], "depends_on": "07" },
+  { "id": "27", "title": "Implement ResponderPoolMembership request/approval workflow", "description": "Lets a user request Authorized Responder status; admin approves (criteria pending, decision 52).", "scope": ["src/modules/panic/responder-pool.service.ts", "src/modules/panic/responder-pool.repository.ts", "src/migrations/sql/012_responder_pool.sql"], "acceptance": ["Request defaults to pending until an admin explicitly approves", "Approved members are queryable for panic-alert routing"], "depends_on": "11" },
+  { "id": "28", "title": "Implement PanicAlert aggregate and TriggerPanicAlert use case", "description": "Fires an alert with continuous geolocation to the configured or default recipients (decisions 62-65).", "scope": ["src/modules/panic/panic-alert.service.ts", "src/modules/panic/panic-alert.repository.ts", "src/modules/panic/__tests__/panic-alert.spec.ts", "src/migrations/sql/013_panic_alert.sql"], "acceptance": ["Trigger with no prior configuration routes to the Responder pool by default (decision 65)", "Trigger with a configured personal contact and/or pool routes to all configured recipients", "Never resolves to zero recipients"], "depends_on": "27" },
+  { "id": "29", "title": "Implement ChatThread and masked messaging", "description": "One thread per Report+Helper pair, masking identity per RiskTierConfig (decision 54, 60).", "scope": ["src/modules/messaging/chat-thread.service.ts", "src/modules/messaging/chat-thread.repository.ts", "src/modules/messaging/__tests__/masking.spec.ts", "src/migrations/sql/014_chat_thread.sql"], "acceptance": ["Message payload never carries a raw UserId, only MaskedIdentity", "High-tier Reports mask identity from other Helpers too, not just the Reporter (decision 55)"], "depends_on": "24" },
+  { "id": "30", "title": "Implement PaymentIntent with RiskTier-gated peer-to-peer/intermediated split", "description": "Routes an allocated Reward through the PSP or clears it for direct settlement, enforcing decision 58.", "scope": ["src/modules/payments/payment-intent.service.ts", "src/modules/payments/payment-intent.repository.ts", "src/modules/payments/__tests__/payment-mode.spec.ts", "src/migrations/sql/015_payment_intent.sql"], "acceptance": ["peer_to_peer mode is rejected outright when RiskTierConfig marks the Report high-tier", "PSP integration point is stubbed behind an interface pending vendor selection (decision 59)"], "depends_on": "20" },
+  { "id": "31", "title": "Implement DualControlAccessRequest workflow for AccountabilityLogEntry decryption", "description": "Requires a logged legal basis and 2 distinct admin approvals before granting decryption (decision 45).", "scope": ["src/modules/admin-access/dual-control.service.ts", "src/modules/admin-access/dual-control.repository.ts", "src/modules/admin-access/__tests__/dual-control.spec.ts", "src/migrations/sql/016_dual_control_access.sql"], "acceptance": ["Access is denied with only 1 approval, even with a valid legal basis", "Every grant and denial is permanently logged, including the two approver identities"], "depends_on": "12" },
+  { "id": "32", "title": "Implement FeeRule registry (admin-managed, TTL-cached, nullable category = global default)", "description": "Creates the runtime-editable fee-percent + allowed-payment-mode registry, mirroring RiskTierConfig's pattern (decisions 39, 58).", "scope": ["src/modules/monetization-config/fee-rule.interface.ts", "src/modules/monetization-config/fee-rule.service.ts", "src/modules/monetization-config/fee-rule.repository.ts", "src/migrations/sql/017_fee_rule.sql"], "acceptance": ["Admin can set a Category's feePercent/paymentModeAllowed without a code deploy", "A Category with no specific rule falls back to the global default rule, not a hardcoded value"], "depends_on": "22", "note": "Amendment — this task never existed in the original backlog even though `003-admin-tactical-design.md`'s task 07 (`FeeRuleEntity`/`FeeRuleRepository`) and decisions 39/58 both require an API-side counterpart. Added when admin task 07 was about to be started and had nothing to call. The 'high-tier categories cannot allow peer_to_peer' constraint (mirrors task 30's PaymentIntent check) is NOT enforced here — it would require this module to read RiskTierConfig, which lives in `risk-config` and isn't reachable without violating ARCHITECTURE.md's no-cross-module-import rule until that lookup is promoted to `shared/` (not yet done, no consumer has forced it). Flagged in `docs/feature/monetization-config.md`, not fixed, to avoid an unplanned refactor of already-shipped code." },
+  { "id": "33", "title": "Implement AdminAccount authentication (email + bcrypt password, JWT issuance)", "description": "Lets an admin log into apps/admin with email/password instead of the OAuth/OTP providers used by end users (decision 67).", "scope": ["src/modules/auth/admin-account.interface.ts", "src/modules/auth/admin-account.repository.ts", "src/modules/auth/admin-login.service.ts", "src/modules/auth/admin-login.controller.ts", "src/modules/auth/admin-login.routes.ts", "src/migrations/sql/018_admin_account.sql", "scripts/seed-admin.ts"], "acceptance": ["POST /auth/admin-login with correct credentials returns a JWT with role=admin", "POST /auth/admin-login with a wrong password or unknown email returns 401, never revealing which"], "depends_on": "11", "note": "Amendment (decision 67) — added when the owner asked to remove the temporary manual-QA IdentityBloc bypass and log in for real. No AdminAccount aggregate or auth-module existed in the backlog; AuthenticateWithProvider (decision 31) only covers Google/Apple/Facebook/OTP, which don't fit an internal admin panel. Mounted at /auth/admin-login (outside /api, alongside the not-yet-built /auth/login), so it's reachable before a JWT exists." }
 ]
 ```
 

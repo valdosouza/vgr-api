@@ -5,11 +5,13 @@
     "dev": "tsx watch --require tsconfig-paths/register src/server.ts",
     "start:dev": "npm run dev",
     "db:migrate": "tsx --require tsconfig-paths/register scripts/run-migrations.ts",
+    "seed:admin": "tsx --require tsconfig-paths/register scripts/seed-admin.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "jest --runInBand --forceExit"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "date-fns": "^4.4.0",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
