@@ -24,7 +24,7 @@ const mockedGate = assertCapability as jest.MockedFunction<typeof assertCapabili
 function input(overrides: Partial<SubmitReportInput> = {}): SubmitReportInput {
   return {
     clientKey: '3f9d1c2e-0000-4000-8000-000000000001',
-    category: 'missing_person',
+    category: 'missing',
     freeTag: null,
     subject: 'child',
     detailFields: null,
@@ -39,7 +39,7 @@ function row(overrides: Partial<ReportRow> = {}): ReportRow {
   return {
     id: 7,
     clientKey: '3f9d1c2e-0000-4000-8000-000000000001',
-    category: 'missing_person',
+    category: 'missing',
     freeTag: null,
     subject: 'child',
     detailFields: null,

@@ -1,26 +1,39 @@
+import pool from '@shared/db/connection'
 import * as repository from '@modules/risk-config/risk-config.repository'
 import { getRiskTier, setRiskTier } from '@modules/risk-config/risk-config.service'
+import { invalidateRiskTierCache } from '@shared/risk/risk-tier'
 
 jest.mock('@modules/risk-config/risk-config.repository')
+// The READ path moved to @shared/risk/risk-tier (decision 135 consumer)
+// and queries the pool directly — the module repository now only backs
+// the admin CRUD, so reads are mocked at the pool.
+jest.mock('@shared/db/connection', () => ({
+  __esModule: true,
+  default: { query: jest.fn() },
+}))
 
 const mockedRepository = repository as jest.Mocked<typeof repository>
+const mockedQuery = pool.query as jest.Mock
 
 describe('risk-config.service', () => {
   beforeEach(() => {
     jest.resetAllMocks()
+    invalidateRiskTierCache()
   })
 
   it('returns the configured tier, not a default, for a Category that was explicitly set', async () => {
-    mockedRepository.findRiskTierConfigByCategory.mockResolvedValue({ category: 'trafficking', tier: 'high' })
+    mockedQuery.mockResolvedValue([[{ tier: 'high' }]])
 
     const tier = await getRiskTier('trafficking')
 
     expect(tier).toBe('high')
-    expect(mockedRepository.findRiskTierConfigByCategory).toHaveBeenCalledWith('trafficking')
+    expect(mockedQuery).toHaveBeenCalledWith(expect.stringContaining('tb_risk_tier_config'), [
+      'trafficking',
+    ])
   })
 
   it('defaults to low for a Category with no configured RiskTier', async () => {
-    mockedRepository.findRiskTierConfigByCategory.mockResolvedValue(null)
+    mockedQuery.mockResolvedValue([[]])
 
     const tier = await getRiskTier('traffic')
 
@@ -28,25 +41,25 @@ describe('risk-config.service', () => {
   })
 
   it('is readable from cache without a query on every request (TTL-cached)', async () => {
-    mockedRepository.findRiskTierConfigByCategory.mockResolvedValue({ category: 'assault', tier: 'medium' })
+    mockedQuery.mockResolvedValue([[{ tier: 'medium' }]])
 
     await getRiskTier('assault')
     await getRiskTier('assault')
 
-    expect(mockedRepository.findRiskTierConfigByCategory).toHaveBeenCalledTimes(1)
+    expect(mockedQuery).toHaveBeenCalledTimes(1)
   })
 
   it('persists an admin update and invalidates the cache so the next read reflects it', async () => {
-    mockedRepository.findRiskTierConfigByCategory.mockResolvedValueOnce({ category: 'robbery', tier: 'low' })
+    mockedQuery.mockResolvedValueOnce([[{ tier: 'low' }]])
     await getRiskTier('robbery')
 
     await setRiskTier('robbery', 'high')
     expect(mockedRepository.upsertRiskTierConfig).toHaveBeenCalledWith('robbery', 'high')
 
-    mockedRepository.findRiskTierConfigByCategory.mockResolvedValueOnce({ category: 'robbery', tier: 'high' })
+    mockedQuery.mockResolvedValueOnce([[{ tier: 'high' }]])
     const tier = await getRiskTier('robbery')
 
     expect(tier).toBe('high')
-    expect(mockedRepository.findRiskTierConfigByCategory).toHaveBeenCalledTimes(2)
+    expect(mockedQuery).toHaveBeenCalledTimes(2)
   })
 })

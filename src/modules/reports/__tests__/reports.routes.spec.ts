@@ -25,7 +25,7 @@ const mockedAccountability = appendAccountabilityLogEntry as jest.MockedFunction
 function body(overrides: Record<string, unknown> = {}) {
   return {
     clientKey: randomUUID(),
-    category: 'missing_person',
+    category: 'missing',
     subject: 'child',
     position: { lat: -23.55, lng: -46.63 },
     ...overrides,
