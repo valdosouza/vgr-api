@@ -8,8 +8,13 @@ export async function login(req: Request, res: Response) {
   if (body === null) return
 
   try {
-    const jwt = await service.authenticateAdmin(body.email, body.password)
-    res.status(200).json({ jwt })
+    const result = await service.authenticateAdmin(body.email, body.password, body.totpCode)
+    if (result.kind === 'enroll') {
+      // Decision 114: enrollment is mandatory — no full JWT before it.
+      res.status(200).json({ twoFactorSetupRequired: true, enrollToken: result.enrollToken })
+      return
+    }
+    res.status(200).json({ jwt: result.jwt })
   } catch (err) {
     handleError(res, err, 'auth/admin-login POST')
   }

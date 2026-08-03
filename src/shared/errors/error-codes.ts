@@ -21,6 +21,9 @@ export const ErrorCodes = {
   /** Legal Gate refusal (decisions 76, 104): the capability is blocked in
    *  this jurisdiction. Ships with HTTP 451. */
   LEGAL_BLOCKED: 'LEGAL_BLOCKED',
+  /** Password was right but the account has 2FA enabled and the TOTP code
+   *  is missing/wrong (decision 114) — client shows the code step. */
+  TWO_FACTOR_REQUIRED: 'TWO_FACTOR_REQUIRED',
   UNAUTHORIZED: 'UNAUTHORIZED',
   FORBIDDEN: 'FORBIDDEN',
   INTERNAL: 'INTERNAL',

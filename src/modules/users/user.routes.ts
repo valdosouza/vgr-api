@@ -26,4 +26,14 @@ router.delete('/:id', controller.remove)
 router.get('/:id/privileges', requirePrivilege(InterfaceKeys.USER_PRIVILEGES, Privileges.VIEW), controller.privileges)
 router.put('/:id/privileges/:interfaceId', requirePrivilege(InterfaceKeys.USER_PRIVILEGES, Privileges.UPDATE), controller.syncPrivileges)
 
+// Dual-control 2FA reset (decision 114): users.UPDATE (router guard above)
+// AND the dual-control approver resource — someone else vouches, never a
+// unilateral shortcut (decision 70). Service refuses self-reset.
+router.post(
+  '/:id/2fa/reset',
+  requirePrivilege(InterfaceKeys.USERS, Privileges.UPDATE),
+  requirePrivilege(InterfaceKeys.DUAL_CONTROL_APPROVAL, Privileges.UPDATE),
+  controller.resetTwoFactor
+)
+
 export default router

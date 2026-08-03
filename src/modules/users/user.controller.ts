@@ -62,6 +62,18 @@ export async function remove(req: Request, res: Response) {
   }
 }
 
+export async function resetTwoFactor(req: Request, res: Response) {
+  const id = parseId(req, res)
+  if (id === null) return
+  try {
+    await service.resetTwoFactor(id, req.user!.userId)
+    auditFromRequest(req, 'update', 'user_2fa_reset', id)
+    res.status(200).json({ ok: true, data: { id } })
+  } catch (err) {
+    handleError(res, err, 'users POST :id/2fa/reset')
+  }
+}
+
 export async function privileges(req: Request, res: Response) {
   const id = parseId(req, res)
   if (id === null) return

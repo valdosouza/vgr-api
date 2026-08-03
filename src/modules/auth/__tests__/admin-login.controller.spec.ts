@@ -12,7 +12,7 @@ describe('POST /auth/admin-login', () => {
   })
 
   it('returns 200 with the jwt on success', async () => {
-    mockedService.authenticateAdmin.mockResolvedValue('fake.jwt.token')
+    mockedService.authenticateAdmin.mockResolvedValue({ kind: 'session', jwt: 'fake.jwt.token' })
 
     const res = await request(app)
       .post('/auth/admin-login')
@@ -20,12 +20,12 @@ describe('POST /auth/admin-login', () => {
 
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ jwt: 'fake.jwt.token' })
-    expect(mockedService.authenticateAdmin).toHaveBeenCalledWith('valdo@vgr.com.br', 'teste')
+    expect(mockedService.authenticateAdmin).toHaveBeenCalledWith('valdo@vgr.com.br', 'teste', undefined)
   })
 
   it('returns 401 when the service rejects the credentials', async () => {
     const { HttpError } = jest.requireActual('@shared/errors/http-error')
-    mockedService.authenticateAdmin.mockRejectedValue(new HttpError(401, 'Invalid email or password'))
+    mockedService.authenticateAdmin.mockRejectedValue(new HttpError(401, 'Invalid email or password', undefined, 'UNAUTHORIZED'))
 
     const res = await request(app)
       .post('/auth/admin-login')
@@ -44,7 +44,7 @@ describe('POST /auth/admin-login', () => {
   })
 
   it('does not require an Authorization header (route is public, outside /api)', async () => {
-    mockedService.authenticateAdmin.mockResolvedValue('fake.jwt.token')
+    mockedService.authenticateAdmin.mockResolvedValue({ kind: 'session', jwt: 'fake.jwt.token' })
 
     const res = await request(app)
       .post('/auth/admin-login')

@@ -10,7 +10,7 @@ jest.mock('@shared/mailer/mailer')
 const mockedRepository = repository as jest.Mocked<typeof repository>
 const mockedMailer = mailer as jest.Mocked<typeof mailer>
 
-const account = { id: 1, email: 'valdo@vgr.com.br', passwordHash: 'x', active: 'S' as const, sessionVersion: 1, failedLoginCount: 0 }
+const account = { id: 1, email: 'valdo@vgr.com.br', passwordHash: 'x', active: 'S' as const, sessionVersion: 1, failedLoginCount: 0, totpSecret: null, totpEnabled: 'N' as const }
 
 describe('password-recovery.service recoveryPassword', () => {
   beforeEach(() => {

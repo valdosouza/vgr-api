@@ -66,6 +66,23 @@ export async function bumpSessionVersion(id: number): Promise<void> {
   await pool.query(`UPDATE tb_user SET session_version = session_version + 1 WHERE id = ?`, [id])
 }
 
+/** Dual-control 2FA reset (decision 114): wipes secret and recovery codes;
+ *  the user re-enrolls at next login. */
+export async function clearTwoFactor(id: number): Promise<void> {
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    await conn.query(`UPDATE tb_user SET totp_secret = NULL, totp_enabled = 'N' WHERE id = ?`, [id])
+    await conn.query(`DELETE FROM tb_user_recovery_code WHERE tb_user_id = ?`, [id])
+    await conn.commit()
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
+  }
+}
+
 export async function softDeleteUser(id: number): Promise<void> {
   const conn = await pool.getConnection()
   try {

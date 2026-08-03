@@ -71,6 +71,26 @@ export async function deleteUser(id: number, actorId: number): Promise<void> {
   invalidateSession(id)
 }
 
+/** Dual-control 2FA reset (decision 114): another admin unlocks a user who
+ *  lost both device and recovery codes — never a unilateral shortcut
+ *  (decision 70). Route stacks users:UPDATE + dual_control_approval. */
+export async function resetTwoFactor(id: number, actorId: number): Promise<void> {
+  if (id === actorId) {
+    // Resetting your own 2FA would collapse the second factor into the
+    // first — the whole point is that SOMEONE ELSE vouches for you.
+    throw new HttpError(
+      409,
+      'You cannot reset your own two-factor enrollment',
+      undefined,
+      ErrorCodes.BUSINESS_RULE
+    )
+  }
+  await getUser(id)
+  await repository.clearTwoFactor(id)
+  await repository.bumpSessionVersion(id)
+  invalidateSession(id)
+}
+
 export async function getUserPrivilegeMatrix(id: number): Promise<UserInterfacePrivileges[]> {
   await getUser(id)
   const rows = await repository.listUserPrivilegeMatrix(id)

@@ -4,7 +4,8 @@ import { AdminAccountRow } from '@modules/auth/admin-account.interface'
 export async function findAdminAccountByEmail(email: string): Promise<AdminAccountRow | null> {
   const [rows] = await pool.query<any[]>(
     `SELECT id, email, password_hash AS passwordHash, active,
-            session_version AS sessionVersion, failed_login_count AS failedLoginCount
+            session_version AS sessionVersion, failed_login_count AS failedLoginCount,
+            totp_secret AS totpSecret, totp_enabled AS totpEnabled
      FROM tb_user WHERE email = ? AND deleted = 'N'`,
     [email]
   )
@@ -14,7 +15,8 @@ export async function findAdminAccountByEmail(email: string): Promise<AdminAccou
 export async function findAdminAccountById(id: number): Promise<AdminAccountRow | null> {
   const [rows] = await pool.query<any[]>(
     `SELECT id, email, password_hash AS passwordHash, active,
-            session_version AS sessionVersion, failed_login_count AS failedLoginCount
+            session_version AS sessionVersion, failed_login_count AS failedLoginCount,
+            totp_secret AS totpSecret, totp_enabled AS totpEnabled
      FROM tb_user WHERE id = ? AND deleted = 'N'`,
     [id]
   )
@@ -90,6 +92,59 @@ export async function updatePassword(id: number, passwordHash: string): Promise<
      WHERE id = ?`,
     [passwordHash, id]
   )
+}
+
+/** Stores the envelope-encrypted secret, still disabled until confirmed. */
+export async function setTotpSecret(id: number, encryptedSecret: string): Promise<void> {
+  await pool.query(`UPDATE tb_user SET totp_secret = ?, totp_enabled = 'N' WHERE id = ?`, [
+    encryptedSecret,
+    id,
+  ])
+}
+
+export async function enableTotp(id: number): Promise<void> {
+  await pool.query(`UPDATE tb_user SET totp_enabled = 'S' WHERE id = ?`, [id])
+}
+
+/** Recovery-code login and dual-control reset both force re-enrollment. */
+export async function clearTotp(id: number): Promise<void> {
+  await pool.query(`UPDATE tb_user SET totp_secret = NULL, totp_enabled = 'N' WHERE id = ?`, [id])
+}
+
+/** Replaces the whole set — 10 fresh codes per enrollment (decision 114). */
+export async function replaceRecoveryCodes(userId: number, codeHashes: string[]): Promise<void> {
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    await conn.query(`DELETE FROM tb_user_recovery_code WHERE tb_user_id = ?`, [userId])
+    for (const hash of codeHashes) {
+      await conn.query(`INSERT INTO tb_user_recovery_code (tb_user_id, code_hash) VALUES (?, ?)`, [
+        userId,
+        hash,
+      ])
+    }
+    await conn.commit()
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
+  }
+}
+
+export async function listUnusedRecoveryCodes(
+  userId: number
+): Promise<{ id: number; codeHash: string }[]> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT id, code_hash AS codeHash FROM tb_user_recovery_code
+     WHERE tb_user_id = ? AND used_at IS NULL`,
+    [userId]
+  )
+  return rows
+}
+
+export async function markRecoveryCodeUsed(id: number): Promise<void> {
+  await pool.query(`UPDATE tb_user_recovery_code SET used_at = NOW() WHERE id = ?`, [id])
 }
 
 /** Used only by scripts/seed-admin.ts — bootstrap of the very first account

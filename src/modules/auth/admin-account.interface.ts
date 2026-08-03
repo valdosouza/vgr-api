@@ -11,4 +11,9 @@ export interface AdminAccountRow {
   sessionVersion: number
   /** Progressive-delay counter (decision 113) — resets on success. */
   failedLoginCount: number
+  /** Envelope-encrypted base32 TOTP secret (decisions 111/114); null until
+   *  enrollment starts. */
+  totpSecret: string | null
+  /** 'S' once the user confirmed a code — from then on login requires TOTP. */
+  totpEnabled: 'S' | 'N'
 }
