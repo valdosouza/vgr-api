@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { newPasswordSchema } from '@shared/security/password-policy'
 
 const baseUser = {
   name: z.string().min(2).max(120),
@@ -14,14 +15,15 @@ const baseUser = {
 export const userCreateDto = z.object({
   ...baseUser,
   // Admin sets the initial password (decision 75 — no e-mail invitation in
-  // the MVP). Same minimum used by the future recovery flow.
-  password: z.string().min(5).max(72),
+  // the MVP). Policy from decision 114; existing passwords stay valid
+  // until the next change.
+  password: newPasswordSchema,
 })
 
 export const userUpdateDto = z.object({
   ...baseUser,
   // Absent = keep the current password (setes users PUT semantics).
-  password: z.string().min(5).max(72).optional(),
+  password: newPasswordSchema.optional(),
 })
 
 export const userPrivilegesSyncDto = z.object({

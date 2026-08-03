@@ -1,4 +1,5 @@
 import express from 'express'
+import helmet from 'helmet'
 import swaggerUi from 'swagger-ui-express'
 import swaggerJsdoc from 'swagger-jsdoc'
 import dotenv from 'dotenv'
@@ -8,12 +9,32 @@ import { authMiddleware } from '@gateway/auth.middleware'
 import { authRateLimitMiddleware, rateLimitMiddleware } from '@gateway/rate-limit.middleware'
 import apiRouter from '@gateway/router'
 import adminLoginRoutes from '@modules/auth/admin-login.routes'
+import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
 const app = express()
 
+// Behind the deployment proxy the rate limiter and the audit trail must see
+// the real client IP, not the proxy's (decision 115).
+app.set('trust proxy', 1)
+
+// Security headers (decision 115). CSP is disabled for now: this API
+// serves JSON (+ Swagger outside production); the admin panel is served
+// elsewhere — revisit if the API ever serves HTML.
+app.use(helmet({ contentSecurityPolicy: false }))
+
+// CORS: explicit origin list (decision 115). '*' only ever happens outside
+// production (allowedOrigins enforces it); production without a configured
+// origin refuses boot (assertRequiredEnv).
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN ?? '*')
+  const origins = allowedOrigins()
+  const requestOrigin = req.headers.origin
+  if (origins.includes('*')) {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+  } else if (requestOrigin && origins.includes(requestOrigin)) {
+    res.setHeader('Access-Control-Allow-Origin', requestOrigin)
+    res.setHeader('Vary', 'Origin')
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if (req.method === 'OPTIONS') {
