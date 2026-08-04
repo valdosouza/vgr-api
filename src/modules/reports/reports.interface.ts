@@ -88,7 +88,17 @@ export interface OfferView {
   createdAt: string | null
 }
 
-/** GetReportVisibility output (decisions 24/41/50/135). */
+/** Attachment as owner/participant see it (M2). The public open view
+ *  carries publicIds only — which derivative a third party may fetch is
+ *  the media route's decision (blur-only on high tier, decision 128). */
+export interface MediaAttachmentView {
+  publicId: string
+  mime?: string
+  width?: number
+  height?: number
+}
+
+/** GetReportVisibility output (decisions 24/41/50/128/135). */
 export type ReportView =
   | {
       access: 'summary'
@@ -111,6 +121,7 @@ export type ReportView =
       position: { lat: number; lng: number }
       detailFields: Record<string, unknown> | null
       createdAt: string
+      media: MediaAttachmentView[]
     }
   | {
       access: 'participant' | 'owner'
@@ -125,6 +136,7 @@ export type ReportView =
       createdAt: string
       resolvedAt: string | null
       timeline: TimelineEventView[]
+      media: MediaAttachmentView[]
       /** Owner only — absent for participants (decision 55's caution). */
       offers?: OfferView[]
     }

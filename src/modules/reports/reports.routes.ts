@@ -42,4 +42,19 @@ router.get('/:id', optionalAppAuth, controller.getById)
 router.put('/:id', optionalAppAuth, controller.edit)
 router.post('/:id/resolve', optionalAppAuth, controller.resolve)
 
+/**
+ * @swagger
+ * /app-reports/{id}/media:
+ *   post:
+ *     summary: Attaches an uploaded media to the report — publicId as bearer secret, one attach, limit per report (decisions 129/134/138)
+ *     security: []
+ * /app-reports/{id}/media/{mediaPublicId}/{variant}:
+ *   get:
+ *     summary: Streams an attached derivative under the report's visibility; public high-tier gets blur only (decisions 128/135)
+ *     security: []
+ */
+router.post('/:id/media', optionalAppAuth, controller.attachMedia)
+router.get('/:id/media/:mediaPublicId/:variant', optionalAppAuth, controller.streamMedia)
+router.get('/:id/media/:mediaPublicId', optionalAppAuth, controller.streamMedia)
+
 export default router

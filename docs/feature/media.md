@@ -1,10 +1,20 @@
-# Media (images) — M1 foundation + M3 retention/panel
+# Media (images) — M1 foundation + M3 retention/panel + M2 report attach
 
 Decisions 126–132 (`AI/docs/decisions/VGR-plano.md`); strategy in
 `AI/docs/plans/plano-imagens.md`. M1 ships the foundation (ingest pipeline,
 encrypted storage behind a port, app-plane routes); M3 ships retention
-(scheduler + crypto-shredding job) and audited panel reads. Report
-integration (M2) is NOT built — it waits for the report module.
+(scheduler + crypto-shredding job) and audited panel reads; M2 (R4 of
+plano-denuncia.md, decisions 134/136/138) wires media to reports — attach
+routes and access rules live in `docs/feature/reports.md`, lifecycle
+consequences here.
+
+## Lifecycle since M2 (decision 134)
+
+Evidence uploads are born **`pending`**; the attach consumes that state
+(`pending → available`, one attach ever). `available` MEANS attached.
+Pending media never attached is an **orphan** and expires after
+`MEDIA_ORPHAN_TTL_HOURS` (48h default — decision 136) in the expiry job.
+Owner reads on `/app-media` serve `pending` and `available` alike.
 
 ## Routes (app plane, mounted at `/app-media` — outside `/api`)
 
@@ -21,7 +31,8 @@ integration (M2) is NOT built — it waits for the report module.
   other owner, anonymous-owned, blocked, shredded, `original`) — never 403:
   existence is information.
 - Anonymous-owned media cannot be read back on this route; it is served
-  through its report once M2 wires the reference.
+  through its report (M2: `GET /app-reports/:id/media/:publicId/:variant?`
+  under the report's visibility rules).
 
 ## Ingest pipeline (`media.service.ingest`)
 
@@ -65,8 +76,9 @@ index; nothing scans storage.
 `MEDIA_KEK`(+`_VERSION`) — required in production (boot refuses without).
 `BLOB_STORE`, `MEDIA_FS_ROOT`, `S3_ENDPOINT/REGION/BUCKET/ACCESS_KEY/SECRET_KEY`
 (all four required in production when `BLOB_STORE=s3`), `MEDIA_MAX_BYTES`
-(10 MB default), `MEDIA_MAX_PER_REPORT` (10 — enforced in M2 when reports
-reference media), `AVATAR_ENABLED` (decision 127, default off).
+(10 MB default), `MEDIA_MAX_PER_REPORT` (10 — enforced at attach, M2),
+`MEDIA_ORPHAN_TTL_HOURS` (48 — decision 136), `AVATAR_ENABLED`
+(decision 127, default off).
 
 ## Panel reads (M3 — mounted at `/api/media`, behind authMiddleware)
 
@@ -93,12 +105,14 @@ decision 90): node-cron in-process, never under NODE_ENV=test, started by
 server.ts only after migrations, and single-instance via MySQL
 `GET_LOCK` on a dedicated connection (`shared/db/job-lock.ts`).
 
-`media-expiry.job.ts` (hourly): rows with `expires_at <= NOW()` and
-`frozen='N'` are **crypto-shredded first** (`dek_wrapped = NULL` — the
-security boundary; objects become unrecoverable noise, backups included),
-then the storage objects are deleted best-effort. `expires_at` gets
-stamped by M2 when the owning case resolves (90 days — decision 131);
-`frozen='S'` (case with an authority) is never selected.
+`media-expiry.job.ts` (hourly): due rows — stamped `expires_at <= NOW()`,
+OR orphans (`pending` older than `MEDIA_ORPHAN_TTL_HOURS`, decision 136) —
+with `frozen='N'` are **crypto-shredded first** (`dek_wrapped = NULL` —
+the security boundary; objects become unrecoverable noise, backups
+included), then the storage objects are deleted best-effort. `expires_at`
+is stamped when the owning case resolves (90 days — decision 131) and
+restarted by an unfreeze (141d); `frozen='S'` (case with an authority,
+propagated by case-freeze — 141b) is never selected.
 
 ## Tests
 

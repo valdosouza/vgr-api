@@ -1,12 +1,14 @@
+/** Variant type promoted to @shared/storage/media-object when reports
+ *  became the second reader (M2, amendment-E8 pattern) — re-exported here
+ *  to keep the module surface stable. */
+export type { MediaVariant } from '@shared/storage/media-object'
+
 export type MediaClass = 'evidence' | 'avatar'
 
+/** 'pending' = uploaded, not yet attached to a report; the attach consumes
+ *  it (decision 134) and 'available' means attached from M2 on. Pending
+ *  media never attached expires as an orphan (decision 136). */
 export type MediaStatus = 'pending' | 'available' | 'blocked' | 'deleted'
-
-/** Objects stored per media (plano-imagens.md §4). Everything the app ever
- *  receives is re-encoded output — 'original' exists only when the
- *  reporter chose to keep probative data (decision 130) and is read
- *  exclusively by the audited panel flow (not built in M1). */
-export type MediaVariant = 'normalized' | 'thumb' | 'blur' | 'original'
 
 export interface MediaRow {
   id: number

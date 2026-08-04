@@ -2,8 +2,9 @@
 
 Decisions 134-142 (`AI/docs/decisions/VGR-plano.md`); plan in
 `AI/docs/plans/plano-denuncia.md`; spec tasks 01-03 as amended (E1-E8 block
-in `docs/specs/vgr/003-api-tactical-design.md`). R1 ships submission only —
-feed (R2), lifecycle/freeze (R3) and media attach (R4) come next.
+in `docs/specs/vgr/003-api-tactical-design.md`). R1 ships submission, R3
+the lifecycle/freeze, R4 the media attach (below); the feed is
+`docs/feature/help-matching.md`.
 
 ## Route (app plane — amendment E1)
 
@@ -79,6 +80,46 @@ anonymous reporter's app kept the key it generated; header, never URL).
   cases (same `shared/geo/degrade` grid as the feed — the sharper surface
   would betray the position) or the closure summary on resolved ones.
 
+## Attached media (R4/M2 — decisions 128/129/134/136/138, amendment E4)
+
+The attachment REFERENCES `tb_media` (migration 033, `tb_report_media` —
+never a report column on media). Uploads are born `pending`
+(`/app-media`, see `docs/feature/media.md`); the attach consumes that
+state — once (decision 134).
+
+- `POST /app-reports/:id/media {mediaPublicId}` — report owner only
+  (account or `x-client-key`), open unfrozen cases. The media `publicId`
+  is the bearer secret for ANONYMOUS media (134): whoever presents it may
+  attach it; account-owned media only attaches through the same account
+  (violations answer 404 — existence is information). Consumes the Legal
+  Gate capability **`report.media`** (138, wired in the service so the
+  offline queue is covered; blocked → 451). Enforces
+  `MEDIA_MAX_PER_REPORT` (129). Atomic in one transaction: link + claim
+  `pending→available` + timeline `media_attached` — a crash can never
+  strand evidence where the orphan job would shred it. Replay (queue
+  retry or link race) answers 200 with `replayed: true`, same contract as
+  submit (137); media consumed by ANOTHER report answers 409. Anonymous
+  attaches leave the accountability trail (23), never blocking the flow
+  (123).
+- `GET /app-reports/:id/media/:mediaPublicId/:variant?` — the ONLY read
+  path for anonymous-owned evidence. Scope is the report (a publicId
+  outside it 404s). Owner/participant stream any derivative; third
+  parties only on OPEN cases and, on high-tier categories, ONLY the
+  `blur` (128 — the sharp derivative never reaches a client to be
+  "un-blurred"); resolved cases serve participants only (50). `original`
+  never leaves the audited panel flow (130); `blocked` disappears from
+  the app plane while the panel keeps reading it (M3).
+- `GET /app-reports/:id` now lists attachments: owner/participant get
+  `{publicId, mime, width, height}`; the public open view carries
+  publicIds only.
+
+Lifecycle propagation: resolve stamps the SAME +90d clock on the case's
+media (131); freeze/unfreeze cover report + timeline + attached media in
+one act (141b), the thaw restarting both clocks together (141d). Orphans
+— `pending` media no attach ever consumed — expire after
+`MEDIA_ORPHAN_TTL_HOURS` (48h default, decision 136) in the existing
+media-expiry job.
+
 ## Help offers (`/app-help-offers`, decisions 10/20/34/35)
 
 Anonymous offers accepted in full (35, accountability trail 23);
@@ -108,4 +149,8 @@ end-to-end, 451, XOR, mandatory subject, invalid-token 401),
 retention stamp, visibility tiers, masking, dual-control unfreeze, purge),
 `help-offers.service.spec` (anti-fraud, 409, identity-free timeline),
 `case-freeze.routes.spec` (grants, audit, plane separation), plus the
-risk-config spec adapted to the shared read path. 53 suites / 333 tests.
+risk-config spec adapted to the shared read path.
+`reports.media.spec` (R4: bearer-secret attach, gate 451 before any
+write, same-account rule, one-attach 409, limit, replay, blur-only public
+high tier, resolved participant-only, lifecycle propagation).
+54 suites / 356 tests.

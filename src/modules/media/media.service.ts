@@ -3,17 +3,14 @@ import * as repository from '@modules/media/media.repository'
 import { IngestInput, IngestResult, MediaVariant } from '@modules/media/media.interface'
 import { blurred, normalize, OUTPUT_MIME, sniffMime, thumbnail } from '@modules/media/media-pipeline'
 import { mediaConfig } from '@shared/config/env'
-import { generateDek, sealBlob, openBlob, unwrapDek, wrapDek } from '@shared/crypto/media-cipher'
+import { generateDek, sealBlob, wrapDek } from '@shared/crypto/media-cipher'
 import { blobStore } from '@shared/storage/blob-store'
+import { mediaObjectKey as keyOf, openMediaObject } from '@shared/storage/media-object'
 import { ErrorCodes, FieldErrorCodes } from '@shared/errors/error-codes'
 import { HttpError } from '@shared/errors/http-error'
 
 function sha256Hex(data: Buffer): string {
   return createHash('sha256').update(data).digest('hex')
-}
-
-function keyOf(prefix: string, variant: MediaVariant): string {
-  return `${prefix.slice(0, 2)}/${prefix}/${variant}`
 }
 
 /**
@@ -96,7 +93,10 @@ export async function ingest(input: IngestInput): Promise<IngestResult> {
     publicId,
     class: input.class,
     uploaderAccountId: input.uploaderAccountId,
-    status: 'available',
+    // Evidence is born 'pending' — the attach consumes that state
+    // (decision 134) and never-attached uploads expire as orphans
+    // (decision 136). Avatar (OFF, 127) has no attach step to wait for.
+    status: input.class === 'evidence' ? 'pending' : 'available',
     mimeOriginal,
     mime: OUTPUT_MIME,
     bytesOriginal: input.data.length,
@@ -134,7 +134,12 @@ export async function openVariant(
   const notFound = () => new HttpError(404, 'Media not found', undefined, ErrorCodes.NOT_FOUND)
 
   const media = await repository.findByPublicId(publicId)
-  if (!media || media.status !== 'available' || !media.dekWrapped) throw notFound()
+  // 'pending' (uploaded, not yet attached — M2 lifecycle) is readable by
+  // its owner: the offline queue may attach minutes later and the app
+  // still previews what it sent.
+  if (!media || !['pending', 'available'].includes(media.status) || !media.dekWrapped) {
+    throw notFound()
+  }
   // Anonymous uploads have no owner to authenticate: they are served
   // through the report they belong to (M2), never through this route.
   if (media.uploaderAccountId === null || media.uploaderAccountId !== accessorAccountId) {
@@ -144,9 +149,9 @@ export async function openVariant(
   // (decision 130) — the app never streams it.
   if (variant === 'original') throw notFound()
 
-  const blob = await blobStore().get(keyOf(media.storagePrefix, variant))
-  if (!blob) throw notFound()
-  return { data: openBlob(unwrapDek(media.dekWrapped), blob), mime: media.mime }
+  const data = await openMediaObject(media.storagePrefix, media.dekWrapped, variant)
+  if (!data) throw notFound()
+  return { data, mime: media.mime }
 }
 
 /**
@@ -164,13 +169,13 @@ export async function openVariantForPanel(
 
   const media = await repository.findByPublicId(publicId)
   if (!media || !media.dekWrapped) throw notFound()
-  if (media.status !== 'available' && media.status !== 'blocked') throw notFound()
+  if (!['pending', 'available', 'blocked'].includes(media.status)) throw notFound()
   if (variant === 'original' && !media.keepOriginal) throw notFound()
 
-  const blob = await blobStore().get(keyOf(media.storagePrefix, variant))
-  if (!blob) throw notFound()
+  const data = await openMediaObject(media.storagePrefix, media.dekWrapped, variant)
+  if (!data) throw notFound()
   return {
-    data: openBlob(unwrapDek(media.dekWrapped), blob),
+    data,
     mime: variant === 'original' ? media.mimeOriginal : media.mime,
   }
 }

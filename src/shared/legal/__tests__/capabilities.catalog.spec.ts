@@ -60,13 +60,20 @@ describe('capability catalog (decision 103)', () => {
     }
   })
 
-  it('the migration-022 seed contains exactly the TS catalog keys', () => {
-    const migration = fs.readFileSync(
-      path.join(SRC_DIR, 'migrations', 'sql', '022_legal_gate.sql'),
-      'utf8'
-    )
-    const seeded = [...migration.matchAll(/^\s*\('([a-z][a-z0-9_.]+)',\s*'/gm)]
-      .map((match) => match[1])
+  it('the tb_legal_capability seeds across migrations contain exactly the TS catalog keys', () => {
+    // Capabilities born after migration 022 (e.g. report.media in 033,
+    // decision 138) are seeded by their own migration — the mirror guard
+    // must therefore read EVERY seed, not just the founding one.
+    const sqlDir = path.join(SRC_DIR, 'migrations', 'sql')
+    const seeded = fs
+      .readdirSync(sqlDir)
+      .filter((file) => file.endsWith('.sql'))
+      .flatMap((file) => {
+        const sql = fs.readFileSync(path.join(sqlDir, file), 'utf8')
+        return [...sql.matchAll(/INSERT INTO tb_legal_capability[\s\S]*?;/g)].flatMap((block) =>
+          [...block[0].matchAll(/\('([a-z][a-z0-9_.]+)',\s*'/g)].map((match) => match[1])
+        )
+      })
       .filter((key) => key.includes('.'))
 
     expect(seeded.sort()).toEqual([...catalogValues].sort())

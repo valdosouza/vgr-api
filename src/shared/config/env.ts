@@ -40,6 +40,9 @@ export interface MediaConfig {
   s3: { endpoint: string; region: string; bucket: string; accessKey: string; secretKey: string }
   maxBytes: number
   maxPerReport: number
+  /** Decision 136: pending media never attached expires after this many
+   *  hours — config, not a constant. */
+  orphanTtlHours: number
   /** Decision 127: avatar class is specified but OFF in the MVP. */
   avatarEnabled: boolean
 }
@@ -58,6 +61,7 @@ export function mediaConfig(): MediaConfig {
     },
     maxBytes: Number(process.env.MEDIA_MAX_BYTES ?? 10 * 1024 * 1024),
     maxPerReport: Number(process.env.MEDIA_MAX_PER_REPORT ?? 10),
+    orphanTtlHours: Number(process.env.MEDIA_ORPHAN_TTL_HOURS ?? 48),
     avatarEnabled: process.env.AVATAR_ENABLED === 'true',
   }
 }

@@ -15,6 +15,8 @@ import { assertCapability } from '@shared/legal/legal-gate'
 import { Capabilities } from '@shared/legal/capabilities'
 import { getRiskTier } from '@shared/risk/risk-tier'
 import { degradePosition, degradeTimestamp } from '@shared/geo/degrade'
+import { mediaConfig } from '@shared/config/env'
+import { MediaVariant, openMediaObject } from '@shared/storage/media-object'
 import { ErrorCodes, FieldErrorCodes } from '@shared/errors/error-codes'
 import { HttpError } from '@shared/errors/http-error'
 import logger from '@shared/logger/logger'
@@ -200,8 +202,129 @@ export async function resolveReport(
   if (!transitioned) {
     throw new HttpError(422, 'Report is already resolved', undefined, ErrorCodes.BUSINESS_RULE)
   }
+  // The case's evidence runs on the SAME retention clock (decision 131) —
+  // the media-expiry job crypto-shreds it when the report purges.
+  await repository.stampAttachedMediaExpiry(reportId, expiresAt)
   await repository.appendTimelineEvent(reportId, 'resolved', null)
   return { reportId, status: 'resolved' }
+}
+
+/**
+ * AttachMedia (M2 — decisions 129/134/136/138, amendment E4). The
+ * publicId is the bearer secret for ANONYMOUS media (134): whoever
+ * presents it may attach it — once, consuming 'pending'. Account-owned
+ * media only attaches through the same account. The Legal Gate capability
+ * `report.media` (138) is asserted in the service so the offline queue
+ * (28) is covered like submit.
+ */
+export async function attachMedia(
+  reportId: number,
+  mediaPublicId: string,
+  viewer: ViewerContext,
+  ip: string
+): Promise<{ reportId: number; mediaPublicId: string; replayed: boolean }> {
+  const report = await livingReport(reportId)
+  if (!owns(report, viewer)) throw notFound()
+  if (report.status !== 'open') {
+    throw new HttpError(422, 'Report is already resolved', undefined, ErrorCodes.BUSINESS_RULE)
+  }
+  if (report.frozen) {
+    throw new HttpError(422, 'Report is frozen', undefined, ErrorCodes.BUSINESS_RULE)
+  }
+
+  await assertCapability(Capabilities.REPORT_MEDIA, {
+    userRef: viewer.accountId === null ? undefined : String(viewer.accountId),
+    ip,
+  })
+
+  // Media problems answer 404, never 403 — whether a publicId exists is
+  // itself information (the M1 posture).
+  const mediaNotFound = () => new HttpError(404, 'Media not found', undefined, ErrorCodes.NOT_FOUND)
+  const media = await repository.findMediaByPublicId(mediaPublicId)
+  if (!media || !media.dekWrapped) throw mediaNotFound()
+  if (media.uploaderAccountId !== null && media.uploaderAccountId !== viewer.accountId) {
+    // Decision 134: account media only attaches through the same account.
+    throw mediaNotFound()
+  }
+  if (media.class !== 'evidence') {
+    throw new HttpError(422, 'Only evidence media can be attached', undefined, ErrorCodes.BUSINESS_RULE)
+  }
+  if (media.status !== 'pending' && media.status !== 'available') throw mediaNotFound()
+
+  if (media.status === 'available') {
+    // 'available' means SOME attach already consumed it (M2 lifecycle):
+    // to this report = an offline-queue replay (same 200 as submit, 137);
+    // to another = the one-attach rule of decision 134.
+    if (await repository.isMediaLinked(reportId, media.id)) {
+      return { reportId, mediaPublicId, replayed: true }
+    }
+    throw new HttpError(409, 'Media is already attached', undefined, ErrorCodes.DUPLICATE)
+  }
+
+  const attached = await repository.countAttachedMedia(reportId)
+  if (attached >= mediaConfig().maxPerReport) {
+    throw new HttpError(422, 'Report media limit reached', undefined, ErrorCodes.BUSINESS_RULE, {
+      max: String(mediaConfig().maxPerReport),
+    })
+  }
+
+  const outcome = await repository.attachMedia(reportId, { id: media.id, publicId: media.publicId })
+  if (outcome === 'already_linked') return { reportId, mediaPublicId, replayed: true }
+  if (outcome === 'not_pending') {
+    // Raced with another attach that consumed the state first (134).
+    throw new HttpError(409, 'Media is already attached', undefined, ErrorCodes.DUPLICATE)
+  }
+
+  if (viewer.accountId === null) {
+    try {
+      // Decision 134: every anonymous attach leaves the forensic trail of
+      // decision 23 — and, like submit, never blocks the flow (123).
+      await appendAccountabilityLogEntry('report.media.attach', ip, { reportId, mediaPublicId })
+    } catch (err) {
+      logger.error('Accountability write failed for report.media.attach', { err, reportId })
+    }
+  }
+
+  return { reportId, mediaPublicId, replayed: false }
+}
+
+/**
+ * Report-scoped media serving (M2 — the ONLY way anonymous-owned evidence
+ * is ever read back). Access follows GetReportVisibility (50/135):
+ * owner/participant get any derivative; the public gets derivatives of an
+ * OPEN case only — and on a high-tier category only the blur (decision
+ * 128: the sharp derivative never reaches a client to be "un-blurred").
+ * The EXIF original never leaves the audited panel flow (130).
+ */
+export async function getReportMediaVariant(
+  reportId: number,
+  mediaPublicId: string,
+  variant: MediaVariant,
+  viewer: ViewerContext
+): Promise<{ data: Buffer; mime: string }> {
+  const report = await livingReport(reportId)
+  const media = await repository.findAttachedMedia(reportId, mediaPublicId)
+  // Blocked (moderation hold) disappears from the app plane — the panel
+  // keeps reading it (M3); shredded is gone for everyone.
+  if (!media || media.status !== 'available' || !media.dekWrapped) throw notFound()
+  if (variant === 'original') throw notFound()
+
+  const isOwner = owns(report, viewer)
+  const isParticipant =
+    !isOwner &&
+    viewer.accountId !== null &&
+    (await repository.hasOfferByAccount(report.id, viewer.accountId))
+
+  if (!isOwner && !isParticipant) {
+    // Third parties: a resolved case shows only the closure summary (50).
+    if (report.status !== 'open') throw notFound()
+    const tier = await getRiskTier(report.category)
+    if (tier === 'high' && variant !== 'blur') throw notFound()
+  }
+
+  const data = await openMediaObject(media.storagePrefix, media.dekWrapped, variant)
+  if (!data) throw notFound()
+  return { data, mime: media.mime }
 }
 
 /**
@@ -245,6 +368,11 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
       position: degradePosition({ lat: report.lat as number, lng: report.lng as number }, tier),
       detailFields: report.detailFields,
       createdAt: degradeTimestamp(report.createdAt, tier),
+      // publicIds only — the media route decides which derivative this
+      // viewer may fetch (blur-only on high tier, decision 128).
+      media: (await repository.listAttachedMedia(report.id)).map((m) => ({
+        publicId: m.publicId,
+      })),
     }
   }
 
@@ -263,6 +391,12 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
     createdAt: report.createdAt.toISOString(),
     resolvedAt: report.resolvedAt ? report.resolvedAt.toISOString() : null,
     timeline,
+    media: (await repository.listAttachedMedia(report.id)).map((m) => ({
+      publicId: m.publicId,
+      mime: m.mime,
+      width: m.width,
+      height: m.height,
+    })),
   }
 
   if (isOwner) {
@@ -296,6 +430,9 @@ export async function freezeCase(
   if (!transitioned) {
     throw new HttpError(422, 'Case is already frozen', undefined, ErrorCodes.BUSINESS_RULE)
   }
+  // The WHOLE case in one act (141b): the attached evidence leaves the
+  // media-expiry job's reach together with the report.
+  await repository.setAttachedMediaFrozen(reportId, true)
   return { reportId, frozen: true }
 }
 
@@ -351,6 +488,9 @@ export async function approveUnfreeze(
       ? new Date(Date.now() + RETENTION_DAYS * 24 * 60 * 60 * 1000)
       : null
   await repository.unfreeze(reportId, newExpiresAt)
+  // The evidence thaws with the case and on the SAME restarted clock
+  // (141b/141d) — never "expired yesterday while it was frozen".
+  await repository.setAttachedMediaFrozen(reportId, false, newExpiresAt)
   return { reportId, frozen: false }
 }
 

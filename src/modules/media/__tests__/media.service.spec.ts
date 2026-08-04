@@ -86,7 +86,8 @@ describe('media.service (decisions 126-131)', () => {
 
       expect(result.mime).toBe('image/webp')
       const args = mockedRepository.insertMedia.mock.calls[0][0]
-      expect(args.status).toBe('available')
+      // Evidence is born 'pending' — the attach consumes it (M2, decision 134).
+      expect(args.status).toBe('pending')
       expect(args.mimeOriginal).toBe('image/jpeg')
       expect(args.sha256Original).toHaveLength(64)
 

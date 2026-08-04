@@ -53,6 +53,7 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
     mockedValidate.mockResolvedValue([])
     mockedRepository.getTimeline.mockResolvedValue([])
     mockedRepository.findOffersWithNames.mockResolvedValue([])
+    mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
     mockedRepository.findPendingUnfreeze.mockResolvedValue(null)
     mockedRepository.markResolved.mockResolvedValue(true)

@@ -12,6 +12,8 @@
 export const Capabilities = {
   /** Anonymous reporting with hidden accountability log (decisions 23, 32). */
   REPORT_ANONYMOUS: 'report.anonymous',
+  /** Attaching image evidence to a report (decisions 129, 134, 138). */
+  REPORT_MEDIA: 'report.media',
   /** Publishing a reward promise — CC arts. 854-860 (decisions 1, 30). */
   REWARD_OFFER: 'reward.offer',
   /** Monetary reward via the payment rail (decisions 82, 97). */
@@ -56,6 +58,8 @@ export function isKnownCapability(key: string): key is Capability {
 export const PENDING_WIRING: ReadonlySet<Capability> = new Set<Capability>([
   // report.anonymous: WIRED in R1 (reports.service.ts, decisions 134-142)
   // and therefore removed — the partition spec enforces the removal.
+  // report.media: born WIRED in R4 (reports.service attach, decision 138),
+  // so it never entered this set.
   Capabilities.REWARD_OFFER,
   Capabilities.REWARD_MONETARY,
   Capabilities.REWARD_MEDIATION,

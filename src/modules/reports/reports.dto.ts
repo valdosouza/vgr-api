@@ -47,3 +47,13 @@ export const editReportDto = z
 export const freezeReasonDto = z.object({
   reason: z.string().trim().min(3).max(120),
 })
+
+/** AttachMedia body (M2, decision 134): the publicId is the bearer secret
+ *  for anonymous media — presenting it IS the authorization. */
+export const attachMediaDto = z.object({
+  mediaPublicId: z.string().uuid(),
+})
+
+/** Variants the app plane may name; 'original' parses but the service
+ *  answers 404 for it (panel-only, decision 130). */
+export const reportMediaVariantDto = z.enum(['normalized', 'thumb', 'blur', 'original'])

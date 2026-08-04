@@ -255,6 +255,183 @@ export async function purgeReport(id: number): Promise<void> {
   await pool.query(`UPDATE tb_report_timeline SET payload = NULL WHERE tb_report_id = ?`, [id])
 }
 
+/* ------------------------------------------------------------------ *
+ * Attached media (M2, decisions 128/129/134/136 — amendment E4).
+ * SQL over tb_media / tb_report_media is table access, not a module
+ * import (same posture as tb_help_offer above).
+ * ------------------------------------------------------------------ */
+
+/** The slice of tb_media the attach/serve flows need. */
+export interface AttachableMediaRow {
+  id: number
+  publicId: string
+  class: string
+  uploaderAccountId: number | null
+  status: string
+  mime: string
+  width: number
+  height: number
+  storagePrefix: string
+  dekWrapped: string | null
+}
+
+const ATTACHABLE_SELECT = `
+  SELECT m.id, m.public_id AS publicId, m.class,
+         m.uploader_account_id AS uploaderAccountId, m.status, m.mime,
+         m.width, m.height, m.storage_prefix AS storagePrefix,
+         m.dek_wrapped AS dekWrapped
+  FROM tb_media m`
+
+function toAttachableMedia(row: any): AttachableMediaRow {
+  return {
+    id: row.id,
+    publicId: row.publicId,
+    class: row.class,
+    uploaderAccountId: row.uploaderAccountId ?? null,
+    status: row.status,
+    mime: row.mime,
+    width: row.width,
+    height: row.height,
+    storagePrefix: row.storagePrefix,
+    dekWrapped: row.dekWrapped ?? null,
+  }
+}
+
+export async function findMediaByPublicId(publicId: string): Promise<AttachableMediaRow | null> {
+  const [rows] = await pool.query<any[]>(
+    `${ATTACHABLE_SELECT} WHERE m.public_id = ? AND m.deleted = 'N'`,
+    [publicId]
+  )
+  return rows[0] ? toAttachableMedia(rows[0]) : null
+}
+
+/** The media only if it is attached to THIS report — the serving route's
+ *  scope (a publicId outside the report answers the same 404). */
+export async function findAttachedMedia(
+  reportId: number,
+  publicId: string
+): Promise<AttachableMediaRow | null> {
+  const [rows] = await pool.query<any[]>(
+    `${ATTACHABLE_SELECT}
+     JOIN tb_report_media rm ON rm.tb_media_id = m.id AND rm.deleted = 'N'
+     WHERE rm.tb_report_id = ? AND m.public_id = ? AND m.deleted = 'N'`,
+    [reportId, publicId]
+  )
+  return rows[0] ? toAttachableMedia(rows[0]) : null
+}
+
+export async function listAttachedMedia(reportId: number): Promise<AttachableMediaRow[]> {
+  const [rows] = await pool.query<any[]>(
+    `${ATTACHABLE_SELECT}
+     JOIN tb_report_media rm ON rm.tb_media_id = m.id AND rm.deleted = 'N'
+     WHERE rm.tb_report_id = ? AND m.deleted = 'N' AND m.status = 'available'
+     ORDER BY rm.id`,
+    [reportId]
+  )
+  return rows.map(toAttachableMedia)
+}
+
+export async function isMediaLinked(reportId: number, mediaId: number): Promise<boolean> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT 1 FROM tb_report_media
+     WHERE tb_report_id = ? AND tb_media_id = ? AND deleted = 'N' LIMIT 1`,
+    [reportId, mediaId]
+  )
+  return rows.length > 0
+}
+
+export async function countAttachedMedia(reportId: number): Promise<number> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_report_media WHERE tb_report_id = ? AND deleted = 'N'`,
+    [reportId]
+  )
+  return Number(rows[0]?.total ?? 0)
+}
+
+/**
+ * The attach itself (decision 134), atomic: link + consume 'pending' +
+ * timeline event commit together, so a crash can never strand a media as
+ * attached-but-unlinked (orphan expiry would shred live evidence) or
+ * linked-but-pending (orphan-shredded while attached).
+ *  - 'already_linked': the UNIQUE key collided — an offline-queue replay.
+ *  - 'not_pending': someone else consumed the state first (race with a
+ *    second report, or moderation moved it) — nothing was written.
+ */
+export async function attachMedia(
+  reportId: number,
+  media: { id: number; publicId: string }
+): Promise<'attached' | 'already_linked' | 'not_pending'> {
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    try {
+      await conn.query(`INSERT INTO tb_report_media (tb_report_id, tb_media_id) VALUES (?, ?)`, [
+        reportId,
+        media.id,
+      ])
+    } catch (err: any) {
+      if (err?.code === 'ER_DUP_ENTRY') {
+        await conn.rollback()
+        return 'already_linked'
+      }
+      throw err
+    }
+    const [claim] = await conn.query<any>(
+      `UPDATE tb_media SET status = 'available' WHERE id = ? AND status = 'pending'`,
+      [media.id]
+    )
+    if (claim.affectedRows === 0) {
+      await conn.rollback()
+      return 'not_pending'
+    }
+    await conn.query(
+      `INSERT INTO tb_report_timeline (tb_report_id, event_type, payload) VALUES (?, ?, ?)`,
+      [reportId, 'media_attached', JSON.stringify({ mediaPublicId: media.publicId })]
+    )
+    await conn.commit()
+    return 'attached'
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
+  }
+}
+
+/** Resolution stamps the retention clock on the case's evidence too
+ *  (decision 131 — media.md contract: "expires_at gets stamped by M2 when
+ *  the owning case resolves"). */
+export async function stampAttachedMediaExpiry(
+  reportId: number,
+  expiresAt: Date | null
+): Promise<void> {
+  await pool.query(
+    `UPDATE tb_media m
+     JOIN tb_report_media rm ON rm.tb_media_id = m.id AND rm.deleted = 'N'
+     SET m.expires_at = ?
+     WHERE rm.tb_report_id = ? AND m.deleted = 'N'`,
+    [expiresAt, reportId]
+  )
+}
+
+/** Freeze covers the WHOLE case (decision 141b): report + timeline +
+ *  every attached media in one act. Unfreeze restamps the media clock to
+ *  the report's fresh one (141d). */
+export async function setAttachedMediaFrozen(
+  reportId: number,
+  frozen: boolean,
+  expiresAt?: Date | null
+): Promise<void> {
+  const stampExpiry = !frozen
+  await pool.query(
+    `UPDATE tb_media m
+     JOIN tb_report_media rm ON rm.tb_media_id = m.id AND rm.deleted = 'N'
+     SET m.frozen = ?${stampExpiry ? ', m.expires_at = ?' : ''}
+     WHERE rm.tb_report_id = ? AND m.deleted = 'N'`,
+    stampExpiry ? [frozen ? 'S' : 'N', expiresAt ?? null, reportId] : [frozen ? 'S' : 'N', reportId]
+  )
+}
+
 /** Append-only (decision 19) — there is deliberately no update/delete. */
 export async function appendTimelineEvent(
   reportId: number,

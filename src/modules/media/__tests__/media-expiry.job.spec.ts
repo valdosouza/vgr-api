@@ -58,6 +58,14 @@ describe('media-expiry job (decision 131 — crypto-shredding retention)', () =>
     expect(mockedRepository.shred).not.toHaveBeenCalled()
   })
 
+  it('queries with the configured orphan TTL — config, not a constant (decision 136)', async () => {
+    process.env.MEDIA_ORPHAN_TTL_HOURS = '72'
+    mockedRepository.findExpired.mockResolvedValue([])
+    await runMediaExpiry()
+    expect(mockedRepository.findExpired).toHaveBeenCalledWith(expect.any(Number), 72)
+    delete process.env.MEDIA_ORPHAN_TTL_HOURS
+  })
+
   it('keeps draining batches until the backlog is empty', async () => {
     const batch = (offset: number) =>
       Array.from({ length: 100 }, (_, i) => ({

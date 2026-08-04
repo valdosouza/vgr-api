@@ -1,7 +1,13 @@
 import { Request, Response } from 'express'
 import * as service from '@modules/reports/reports.service'
-import { editReportDto, submitReportDto } from '@modules/reports/reports.dto'
+import {
+  attachMediaDto,
+  editReportDto,
+  reportMediaVariantDto,
+  submitReportDto,
+} from '@modules/reports/reports.dto'
 import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
+import { ErrorCodes } from '@shared/errors/error-codes'
 
 /** Viewer identity for ownership checks (R3): the session account and/or
  *  the bearer clientKey (decision 134's pattern) — sent as a header, never
@@ -74,5 +80,45 @@ export async function resolve(req: Request, res: Response): Promise<void> {
     res.json(await service.resolveReport(id, viewerOf(req)))
   } catch (err) {
     handleError(res, err, 'reports.resolve')
+  }
+}
+
+export async function attachMedia(req: Request, res: Response): Promise<void> {
+  try {
+    const id = parseId(req, res)
+    if (id === null) return
+    const body = parseBody(attachMediaDto, req, res)
+    if (body === null) return
+
+    const result = await service.attachMedia(id, body.mediaPublicId, viewerOf(req), req.ip ?? '')
+    // Replay of the offline queue answers 200 (decision 137's contract
+    // extended to attachments) — a retry is indistinguishable on purpose.
+    res.status(result.replayed ? 200 : 201).json(result)
+  } catch (err) {
+    handleError(res, err, 'reports.attachMedia')
+  }
+}
+
+export async function streamMedia(req: Request, res: Response): Promise<void> {
+  try {
+    const id = parseId(req, res)
+    if (id === null) return
+    const variant = reportMediaVariantDto.safeParse(req.params.variant ?? 'normalized')
+    if (!variant.success) {
+      res.status(404).json({ error: 'Media not found', code: ErrorCodes.NOT_FOUND })
+      return
+    }
+    const { data, mime } = await service.getReportMediaVariant(
+      id,
+      req.params.mediaPublicId,
+      variant.data,
+      viewerOf(req)
+    )
+    res.setHeader('Content-Type', mime)
+    // Media is immutable (a new upload is a new id) — cache privately.
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    res.send(data)
+  } catch (err) {
+    handleError(res, err, 'reports.streamMedia')
   }
 }
