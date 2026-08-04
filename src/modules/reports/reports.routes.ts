@@ -38,6 +38,16 @@ router.post('/', optionalAppAuth, controller.submit)
  *     summary: Resolves the report; helpers stay linked, retention clock starts (decisions 18/131)
  *     security: []
  */
+/**
+ * @swagger
+ * /app-reports/category-forms:
+ *   get:
+ *     summary: Every category's detail-form schema in one read — the app caches it for offline rendering (decision 47)
+ *     security: []
+ */
+// Registered BEFORE '/:id' so the literal segment never parses as an id.
+router.get('/category-forms', controller.categoryForms)
+
 router.get('/:id', optionalAppAuth, controller.getById)
 router.put('/:id', optionalAppAuth, controller.edit)
 router.post('/:id/resolve', optionalAppAuth, controller.resolve)

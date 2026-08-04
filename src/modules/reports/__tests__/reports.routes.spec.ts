@@ -4,7 +4,8 @@ import app from '../../../app'
 import * as repository from '@modules/reports/reports.repository'
 import { assertCapability } from '@shared/legal/legal-gate'
 import { appendAccountabilityLogEntry } from '@shared/audit/accountability'
-import { validateReportDetailFields } from '@shared/risk/category-form'
+import { getCategoryFormSchema, validateReportDetailFields } from '@shared/risk/category-form'
+import { CATEGORIES } from '@shared/taxonomy/taxonomy'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
 
@@ -95,5 +96,27 @@ describe('POST /app-reports (R1 — anonymous end-to-end)', () => {
       .send(body())
     expect(res.status).toBe(401)
     expect(mockedRepository.insertReport).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /app-reports/category-forms (decision 47 — offline form catalog)', () => {
+  const mockedSchema = getCategoryFormSchema as jest.MockedFunction<typeof getCategoryFormSchema>
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedSchema.mockImplementation(async (category) =>
+      category === 'missing' ? [{ name: 'lastSeen', type: 'string', required: true }] : []
+    )
+  })
+
+  it('answers every category in one anonymous read — the app caches it', async () => {
+    const res = await request(app).get('/app-reports/category-forms')
+
+    expect(res.status).toBe(200)
+    expect(res.body.forms).toHaveLength(CATEGORIES.length)
+    const missing = res.body.forms.find((f: any) => f.category === 'missing')
+    expect(missing.fields).toEqual([{ name: 'lastSeen', type: 'string', required: true }])
+    // The literal segment must never parse as a report id.
+    expect(mockedRepository.findById).not.toHaveBeenCalled()
   })
 })

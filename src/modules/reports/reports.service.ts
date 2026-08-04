@@ -9,8 +9,13 @@ import {
   SubmitReportResult,
   ViewerContext,
 } from '@modules/reports/reports.interface'
+import { CATEGORIES } from '@shared/taxonomy/taxonomy'
 import { appendAccountabilityLogEntry } from '@shared/audit/accountability'
-import { validateReportDetailFields } from '@shared/risk/category-form'
+import {
+  FieldDefinition,
+  getCategoryFormSchema,
+  validateReportDetailFields,
+} from '@shared/risk/category-form'
 import { assertCapability } from '@shared/legal/legal-gate'
 import { Capabilities } from '@shared/legal/capabilities'
 import { getRiskTier } from '@shared/risk/risk-tier'
@@ -111,6 +116,24 @@ export async function submitReport(
   }
 
   return { reportId, status: 'open', replayed: false }
+}
+
+/**
+ * The category detail-form catalog for the APP (decision 47, A1): one
+ * anonymous read returns every category's schema so the form renders —
+ * and validates — offline from a local cache. The TTL cache in
+ * shared/risk/category-form keeps this cheap; the server remains the
+ * validation authority on submit.
+ */
+export async function getCategoryForms(): Promise<
+  Array<{ category: string; fields: FieldDefinition[] }>
+> {
+  return Promise.all(
+    CATEGORIES.map(async (category) => ({
+      category,
+      fields: await getCategoryFormSchema(category),
+    }))
+  )
 }
 
 /** Ownership (R3): the account matches, OR the viewer presents the

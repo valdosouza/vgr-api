@@ -80,6 +80,13 @@ anonymous reporter's app kept the key it generated; header, never URL).
   cases (same `shared/geo/degrade` grid as the feed — the sharper surface
   would betray the position) or the closure summary on resolved ones.
 
+## Category form catalog for the app (A1 — decision 47)
+
+`GET /app-reports/category-forms` (anonymous): every category's
+detail-field schema in ONE read — the app caches the payload locally so
+the dynamic form renders (and pre-validates) offline. Served from the
+shared TTL cache; the server stays the validation authority on submit.
+
 ## Attached media (R4/M2 — decisions 128/129/134/136/138, amendment E4)
 
 The attachment REFERENCES `tb_media` (migration 033, `tb_report_media` —

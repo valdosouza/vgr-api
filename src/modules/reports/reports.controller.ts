@@ -51,6 +51,14 @@ export async function submit(req: Request, res: Response): Promise<void> {
   }
 }
 
+export async function categoryForms(_req: Request, res: Response): Promise<void> {
+  try {
+    res.json({ forms: await service.getCategoryForms() })
+  } catch (err) {
+    handleError(res, err, 'reports.categoryForms')
+  }
+}
+
 export async function getById(req: Request, res: Response): Promise<void> {
   try {
     const id = parseId(req, res)
