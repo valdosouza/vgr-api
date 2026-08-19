@@ -147,6 +147,10 @@ Purge job (`report-purge`, hourly at :30): nulls detail fields, exact
 position, free-tag text and timeline payloads of expired unfrozen cases,
 keeping the statistical skeleton (25/131).
 
+Since P1 the panel screen exists (`app/docs/feature/case-freeze.md`):
+migration 034 flipped the `case_freeze` interface from kind 'R' to 'T'
+so it appears on the dynamic menu — same row, same grants.
+
 ## Tests
 
 `reports.service.spec` (gate order, decision-32 choice, replay, dup race,
