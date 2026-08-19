@@ -37,7 +37,7 @@ Mounted at `/api/legal-policy` (jurisdictions / capabilities / rules). The gate 
 ## STATUS
 - L0+L1 (decision 106) — DONE 2026-08-03. 26 suites / 151 tests green; `tsc` clean.
 - **Every capability is in `PENDING_WIRING`**: the consuming domain features (report, reward, panic dispatch) are not built yet. `capabilities.catalog.spec.ts` fails the build if an entry is ever neither wired nor pending, or both — when a domain task wires a capability, it must remove the entry.
-- L2 (AI assessment pipeline → `tb_legal_assessment`, promotion from assessment) and L3 (admin screens in `apps/admin`) are NOT built. Round-2 items 6 (frozen-data behavior) and 7 (assessment record shape) remain open, non-blocking.
+- L3 (admin screens) — DONE 2026-08-19 in `apps/admin` (`app/docs/feature/legal-policy.md`). L2 (AI assessment pipeline → `tb_legal_assessment`, promotion from assessment) is NOT built — blocked on choosing the AI provider. Round-2 items 6 (frozen-data behavior) and 7 (assessment record shape) remain open, non-blocking.
 - Expiry warning job: deliberately not built (decision 90 note — no scheduler until a real job needs it; enforcement doesn't need one).
 
 ## REFERENCES
