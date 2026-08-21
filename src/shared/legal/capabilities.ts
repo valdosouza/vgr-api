@@ -60,10 +60,11 @@ export const PENDING_WIRING: ReadonlySet<Capability> = new Set<Capability>([
   // and therefore removed — the partition spec enforces the removal.
   // report.media: born WIRED in R4 (reports.service attach, decision 138),
   // so it never entered this set.
-  Capabilities.REWARD_OFFER,
-  Capabilities.REWARD_MONETARY,
-  Capabilities.REWARD_MEDIATION,
-  Capabilities.REWARD_INTERMEDIATION_DELEGATED,
+  // reward.offer, reward.monetary: WIRED in Reward R0 (reward.service.ts
+  // offerReward, decisions 1/30/143-147) and therefore removed.
+  // reward.intermediation.delegated: WIRED in the same delivery
+  // (reserveGuarantee).
+  // reward.mediation: WIRED in the same delivery (resolveReward).
   Capabilities.REWARD_INTERMEDIATION_OWN,
   Capabilities.MINOR_DATA_RETENTION,
   Capabilities.IDENTITY_DISCLOSURE,

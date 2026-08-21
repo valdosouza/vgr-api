@@ -6,6 +6,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 import { authMiddleware } from '@gateway/auth.middleware'
+import { appAuthMiddleware } from '@gateway/app-auth.middleware'
 import { authRateLimitMiddleware, rateLimitMiddleware } from '@gateway/rate-limit.middleware'
 import apiRouter from '@gateway/router'
 import adminLoginRoutes from '@modules/auth/admin-login.routes'
@@ -14,6 +15,7 @@ import mediaRoutes from '@modules/media/media.routes'
 import reportRoutes from '@modules/reports/reports.routes'
 import feedRoutes from '@modules/help-matching/help-matching.routes'
 import helpOfferRoutes from '@modules/help-offers/help-offers.routes'
+import rewardRoutes from '@modules/reward/reward.routes'
 import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -113,6 +115,11 @@ app.use('/app-feed', rateLimitMiddleware, feedRoutes)
 
 // Help offers (decisions 10/20/34/35) — anonymous help is a promise.
 app.use('/app-help-offers', rateLimitMiddleware, helpOfferRoutes)
+
+// Reward (decisions 1/30/81-102/143-147) — R0 first slice, monetary
+// guarantee only. Identified account required (appAuthMiddleware, not
+// optional): a monetary reward needs a payer the PSP can bill.
+app.use('/app-reward', rateLimitMiddleware, appAuthMiddleware, rewardRoutes)
 
 // JWT auth on all /api routes (public routes, e.g. listing anonymous
 // reports, go BEFORE this line once they exist — scope-refinement will

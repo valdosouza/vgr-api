@@ -13,6 +13,7 @@ import systemModuleRoutes from '@modules/system-modules/system-module.routes'
 import userRoutes from '@modules/users/user.routes'
 import mediaAdminRoutes from '@modules/media/media-admin.routes'
 import caseFreezeRoutes from '@modules/reports/case-freeze.routes'
+import rewardMediationRoutes from '@modules/reward/reward-mediation.routes'
 
 /**
  * Central router — every module is mounted here at /api/<module>,
@@ -51,5 +52,9 @@ router.use('/media', mediaAdminRoutes)
 
 // Case freeze (decisions 141/142) — freeze with 1, unfreeze with 2.
 router.use('/case-freeze', caseFreezeRoutes)
+
+// Reward mediation (decisions 98/147) — judges fulfillment for the
+// recipient set fixed at reserve time (R0 first slice).
+router.use('/reward-mediation', rewardMediationRoutes)
 
 export default router

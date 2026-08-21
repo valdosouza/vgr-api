@@ -46,6 +46,9 @@ export const InterfaceKeys = {
   /** kind 'R' resource (decisions 141/142 — migration 032): freezing a
    *  case's retention; unfreeze approval is dual-controlled in code. */
   CASE_FREEZE: 'case_freeze',
+  /** kind 'R' resource (decisions 98/147 — migration 035): judging whether
+   *  a reward's condition was fulfilled and instructing capture/cancel. */
+  REWARD_MEDIATION: 'reward_mediation',
 } as const
 
 export type InterfaceKey = (typeof InterfaceKeys)[keyof typeof InterfaceKeys]
