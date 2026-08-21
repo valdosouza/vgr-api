@@ -29,10 +29,20 @@ const router = Router()
  *   get:
  *     summary: Whether this account can already be targeted by a reserve
  *     tags: [Reward]
+ * /app-reward/mediation-criteria:
+ *   get:
+ *     summary: The active mediation criteria — the rules of the game, published before the case (decision 150)
+ *     tags: [Reward]
+ * /app-reward/{reportId}/contest:
+ *   post:
+ *     summary: A case party contests the resolution while the money is still retained (decision 149)
+ *     tags: [Reward]
  */
-// Static routes first — '/:id' would otherwise swallow 'onboarding'.
+// Static routes first — '/:id' would otherwise swallow them.
 router.post('/onboarding', controller.onboard)
 router.get('/onboarding', controller.onboardingStatus)
+router.get('/mediation-criteria', controller.activeCriteria)
+router.post('/:id/contest', controller.contest)
 router.post('/:id', controller.offer)
 router.get('/:id', controller.state)
 router.post('/:id/reserve', controller.reserve)

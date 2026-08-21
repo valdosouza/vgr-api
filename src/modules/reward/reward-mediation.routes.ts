@@ -4,25 +4,78 @@ import { InterfaceKeys, Privileges } from '@shared/acl/privileges'
 import * as controller from '@modules/reward/reward.controller'
 
 /**
- * Reward mediation — panel plane (decisions 98/147), mounted under
- * /api/reward-mediation. Judges fulfillment for the recipient set already
- * fixed at reserve time; does not choose recipients (that would need
- * PENDING criteria publication / dual control per decision 98's full
- * discipline — not built in this slice, see reward.md).
+ * Reward mediation — panel plane (decisions 98/148/149/150), mounted under
+ * /api/reward-mediation. Full discipline: criteria published before the
+ * case, propose -> approve by a DIFFERENT mediator -> contest window ->
+ * execute at the rail; every step in the append-only mediation log.
  */
 const router = Router()
 
 /**
  * @swagger
- * /api/reward-mediation/{id}/resolve:
+ * /api/reward-mediation/criteria:
  *   post:
- *     summary: Judges condition fulfillment — capture releases to the fixed set, refund returns to the payer (decisions 98/100/147)
+ *     summary: Publishes an immutable criteria version — the one active at reserve time governs the case (decision 150)
+ *     tags: [RewardMediation]
+ * /api/reward-mediation/{offerId}:
+ *   get:
+ *     summary: Live resolution, open contests and the immutable trail for an offer
+ *     tags: [RewardMediation]
+ * /api/reward-mediation/{offerId}/propose:
+ *   post:
+ *     summary: Mediator A proposes the outcome, judged by the stamped criteria version (decision 148)
+ *     tags: [RewardMediation]
+ * /api/reward-mediation/{offerId}/approve:
+ *   post:
+ *     summary: A DIFFERENT mediator approves — opens the contest window, does not touch the rail (decisions 148/149)
+ *     tags: [RewardMediation]
+ * /api/reward-mediation/{offerId}/cancel:
+ *   post:
+ *     summary: Abandons the live proposal so a new cycle can start
+ *     tags: [RewardMediation]
+ * /api/reward-mediation/{offerId}/execute:
+ *   post:
+ *     summary: Window elapsed and no open contest — capture releases to the fixed set, cancel refunds the payer (decisions 100/149)
+ *     tags: [RewardMediation]
+ * /api/reward-mediation/contests/{contestId}/close:
+ *   post:
+ *     summary: Closes a contest with a note recorded in the immutable trail (decision 149)
  *     tags: [RewardMediation]
  */
 router.post(
-  '/:id/resolve',
+  '/criteria',
   requirePrivilege(InterfaceKeys.REWARD_MEDIATION, Privileges.UPDATE),
-  controller.resolve
+  controller.publishCriteria
+)
+router.post(
+  '/contests/:id/close',
+  requirePrivilege(InterfaceKeys.REWARD_MEDIATION, Privileges.UPDATE),
+  controller.closeContest
+)
+router.get(
+  '/:id',
+  requirePrivilege(InterfaceKeys.REWARD_MEDIATION, Privileges.VIEW),
+  controller.mediationState
+)
+router.post(
+  '/:id/propose',
+  requirePrivilege(InterfaceKeys.REWARD_MEDIATION, Privileges.UPDATE),
+  controller.propose
+)
+router.post(
+  '/:id/approve',
+  requirePrivilege(InterfaceKeys.REWARD_MEDIATION, Privileges.UPDATE),
+  controller.approve
+)
+router.post(
+  '/:id/cancel',
+  requirePrivilege(InterfaceKeys.REWARD_MEDIATION, Privileges.UPDATE),
+  controller.cancel
+)
+router.post(
+  '/:id/execute',
+  requirePrivilege(InterfaceKeys.REWARD_MEDIATION, Privileges.UPDATE),
+  controller.execute
 )
 
 export default router

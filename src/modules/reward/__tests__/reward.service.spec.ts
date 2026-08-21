@@ -19,6 +19,7 @@ const OFFER_OPEN = {
   status: 'open' as const,
   railChargeId: null,
   noReturnNoticeVersion: '',
+  criteriaVersion: '',
   createdAt: new Date(),
   resolvedAt: null,
 }
@@ -28,6 +29,38 @@ const OFFER_RESERVED = {
   guaranteeMode: 'reserved' as const,
   status: 'reserved' as const,
   railChargeId: 'pay_1',
+  criteriaVersion: 'crit-1',
+}
+
+const CRITERIA = {
+  id: 1,
+  version: 'crit-1',
+  body: 'The published rules of the game.',
+  publishedBy: 1,
+  publishedAt: new Date(),
+}
+
+const RESOLUTION_PROPOSED = {
+  id: 11,
+  rewardOfferId: 1,
+  outcome: 'fulfilled' as const,
+  reason: 'Condition met',
+  criteriaVersion: 'crit-1',
+  proposedBy: 3,
+  proposedAt: new Date(),
+  approvedBy: null,
+  approvedAt: null,
+  windowEndsAt: null,
+  executedAt: null,
+  status: 'proposed' as const,
+}
+
+const RESOLUTION_APPROVED = {
+  ...RESOLUTION_PROPOSED,
+  approvedBy: 4,
+  approvedAt: new Date(),
+  windowEndsAt: new Date(Date.now() - 1000),
+  status: 'approved' as const,
 }
 
 function railMock() {
@@ -111,6 +144,7 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
 
     beforeEach(() => {
       mockedRepository.findOfferByReport.mockResolvedValue(OFFER_OPEN)
+      mockedRepository.findActiveCriteria.mockResolvedValue(CRITERIA)
       mockedRepository.findHelpOffersForRecipients.mockResolvedValue([
         { id: 5, helperAccountId: 8 },
       ])
@@ -120,7 +154,7 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
       mockedPaymentRail.mockReturnValue(rail as any)
     })
 
-    it('reserves against the fixed recipient set and records the rail charge id', async () => {
+    it('reserves against the fixed recipient set, stamping the active criteria version', async () => {
       await service.reserveGuarantee(RESERVE_INPUT, { accountId: 42 })
 
       expect(mockedPaymentRail().reserve).toHaveBeenCalledWith({
@@ -133,8 +167,18 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
         1,
         'pay_1',
         'v1',
+        'crit-1',
         RESERVE_INPUT.recipients
       )
+    })
+
+    it('rejects reserving before any mediation criteria are published (decision 150)', async () => {
+      mockedRepository.findActiveCriteria.mockResolvedValue(null)
+
+      await expect(
+        service.reserveGuarantee(RESERVE_INPUT, { accountId: 42 })
+      ).rejects.toMatchObject({ statusCode: 422, code: 'NOT_AVAILABLE' })
+      expect(mockedPaymentRail).not.toHaveBeenCalled()
     })
 
     it('rejects reserving an already-reserved offer', async () => {
@@ -181,43 +225,162 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
     })
   })
 
-  describe('resolveReward (decision 98/147 — judges the fixed set, does not choose it)', () => {
-    it('fulfilled: captures and marks released', async () => {
+  describe('mediation discipline (decision 98, closed by 148/149/150)', () => {
+    beforeEach(() => {
       mockedRepository.findOfferById.mockResolvedValue(OFFER_RESERVED)
+    })
+
+    it('propose: records the outcome under the stamped criteria version and logs it', async () => {
+      mockedRepository.findLiveResolution.mockResolvedValue(null)
+      mockedRepository.insertResolution.mockResolvedValue(11)
+
+      const result = await service.proposeResolution(1, 'fulfilled', 'Condition met', { userId: 3 })
+
+      expect(result).toEqual({ resolutionId: 11 })
+      expect(mockedRepository.insertResolution).toHaveBeenCalledWith(
+        1,
+        'fulfilled',
+        'Condition met',
+        'crit-1',
+        3
+      )
+      expect(mockedRepository.appendMediationLog).toHaveBeenCalledWith(
+        1,
+        'proposed',
+        'user:3',
+        'fulfilled'
+      )
+    })
+
+    it('propose: rejects when a resolution is already in progress', async () => {
+      mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_PROPOSED)
+
+      await expect(
+        service.proposeResolution(1, 'fulfilled', 'again', { userId: 3 })
+      ).rejects.toMatchObject({ statusCode: 409, code: 'DUPLICATE' })
+    })
+
+    it('propose: rejects an offer that is not reserved', async () => {
+      mockedRepository.findOfferById.mockResolvedValue(OFFER_OPEN)
+
+      await expect(
+        service.proposeResolution(1, 'fulfilled', 'r', { userId: 3 })
+      ).rejects.toMatchObject({ statusCode: 422, code: 'BUSINESS_RULE' })
+    })
+
+    it('approve: a DIFFERENT mediator opens the contest window without touching the rail (148/149)', async () => {
+      mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_PROPOSED)
+
+      const result = await service.approveResolution(1, { userId: 4 })
+
+      expect(result.windowEndsAt).toBeDefined()
+      expect(mockedRepository.approveResolution).toHaveBeenCalledWith(11, 4, expect.any(Date))
+      expect(mockedPaymentRail).not.toHaveBeenCalled()
+    })
+
+    it('approve: rejects the proposer approving their own proposal (decision 148)', async () => {
+      mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_PROPOSED)
+
+      await expect(service.approveResolution(1, { userId: 3 })).rejects.toMatchObject({
+        statusCode: 422,
+        code: 'BUSINESS_RULE',
+      })
+      expect(mockedRepository.approveResolution).not.toHaveBeenCalled()
+    })
+
+    it('contest: a case party contests while the money is retained (decision 149)', async () => {
+      mockedRepository.findOfferByReport.mockResolvedValue(OFFER_RESERVED)
+      mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_APPROVED)
+      mockedRepository.findPartyAccountIds.mockResolvedValue([42, 8])
+      mockedRepository.insertContest.mockResolvedValue(21)
+
+      const result = await service.contestResolution(7, 'I disagree', { accountId: 8 })
+
+      expect(result).toEqual({ contestId: 21 })
+      expect(mockedRepository.appendMediationLog).toHaveBeenCalledWith(
+        1,
+        'contested',
+        'account:8',
+        null
+      )
+    })
+
+    it('contest: rejects an account that is not a party of the case', async () => {
+      mockedRepository.findOfferByReport.mockResolvedValue(OFFER_RESERVED)
+      mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_APPROVED)
+      mockedRepository.findPartyAccountIds.mockResolvedValue([42, 8])
+
+      await expect(
+        service.contestResolution(7, 'outsider', { accountId: 99 })
+      ).rejects.toMatchObject({ statusCode: 403 })
+      expect(mockedRepository.insertContest).not.toHaveBeenCalled()
+    })
+
+    it('execute: rejects while the contest window has not elapsed (decision 149)', async () => {
+      mockedRepository.findLiveResolution.mockResolvedValue({
+        ...RESOLUTION_APPROVED,
+        windowEndsAt: new Date(Date.now() + 60_000),
+      })
+
+      await expect(service.executeResolution(1, { userId: 5 })).rejects.toMatchObject({
+        statusCode: 422,
+        code: 'BUSINESS_RULE',
+      })
+      expect(mockedPaymentRail).not.toHaveBeenCalled()
+    })
+
+    it('execute: rejects while a contest is open (decision 149)', async () => {
+      mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_APPROVED)
+      mockedRepository.findOpenContests.mockResolvedValue([{ id: 21 } as any])
+
+      await expect(service.executeResolution(1, { userId: 5 })).rejects.toMatchObject({
+        statusCode: 422,
+        code: 'BUSINESS_RULE',
+      })
+      expect(mockedPaymentRail).not.toHaveBeenCalled()
+    })
+
+    it('execute fulfilled: captures, marks released and closes the trail', async () => {
+      mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_APPROVED)
+      mockedRepository.findOpenContests.mockResolvedValue([])
       const rail = railMock()
       mockedPaymentRail.mockReturnValue(rail as any)
 
-      await service.resolveReward(1, 'fulfilled', { userId: 3 })
+      await service.executeResolution(1, { userId: 5 })
 
       expect(rail.capture).toHaveBeenCalledWith('pay_1')
       expect(mockedRepository.markResolved).toHaveBeenCalledWith(1, 'released')
+      expect(mockedRepository.markResolutionExecuted).toHaveBeenCalledWith(11)
+      expect(mockedRepository.appendMediationLog).toHaveBeenCalledWith(
+        1,
+        'executed',
+        'user:5',
+        'fulfilled'
+      )
     })
 
-    it('not_fulfilled: cancels and marks refunded', async () => {
-      mockedRepository.findOfferById.mockResolvedValue(OFFER_RESERVED)
+    it('execute not_fulfilled: cancels at the rail and marks refunded', async () => {
+      mockedRepository.findLiveResolution.mockResolvedValue({
+        ...RESOLUTION_APPROVED,
+        outcome: 'not_fulfilled' as const,
+      })
+      mockedRepository.findOpenContests.mockResolvedValue([])
       const rail = railMock()
       mockedPaymentRail.mockReturnValue(rail as any)
 
-      await service.resolveReward(1, 'not_fulfilled', { userId: 3 })
+      await service.executeResolution(1, { userId: 5 })
 
       expect(rail.cancel).toHaveBeenCalledWith('pay_1')
       expect(mockedRepository.markResolved).toHaveBeenCalledWith(1, 'refunded')
     })
 
-    it('rejects resolving an offer that is not reserved', async () => {
-      mockedRepository.findOfferById.mockResolvedValue(OFFER_OPEN)
+    it('publishCriteria: rejects a duplicate version (decision 150 — versions are immutable)', async () => {
+      mockedRepository.findCriteriaByVersion.mockResolvedValue(CRITERIA)
 
       await expect(
-        service.resolveReward(1, 'fulfilled', { userId: 3 })
-      ).rejects.toMatchObject({ statusCode: 422, code: 'BUSINESS_RULE' })
-    })
-
-    it('404s on a missing offer', async () => {
-      mockedRepository.findOfferById.mockResolvedValue(null)
-
-      await expect(
-        service.resolveReward(1, 'fulfilled', { userId: 3 })
-      ).rejects.toMatchObject({ statusCode: 404 })
+        service.publishCriteria('crit-1', 'new text', { userId: 3 })
+      ).rejects.toMatchObject({ statusCode: 409, code: 'DUPLICATE' })
+      expect(mockedRepository.insertCriteria).not.toHaveBeenCalled()
     })
   })
 

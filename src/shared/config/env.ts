@@ -89,6 +89,16 @@ export function paymentConfig(): PaymentConfig {
   }
 }
 
+/**
+ * Mediation discipline (decisions 148/149): days between a resolution's
+ * dual-control approval and the earliest allowed execution — the window
+ * in which the case's parties can contest. Must fit inside the rail's
+ * retention period (ASAAS_ESCROW_DAYS_TO_EXPIRE).
+ */
+export function mediationContestWindowDays(): number {
+  return Number(process.env.MEDIATION_CONTEST_WINDOW_DAYS ?? 7)
+}
+
 /** Boot-time validation — called by server.ts before listening. */
 export function assertRequiredEnv(): void {
   if (process.env.NODE_ENV !== 'production') return

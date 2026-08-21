@@ -64,7 +64,8 @@ export const PENDING_WIRING: ReadonlySet<Capability> = new Set<Capability>([
   // offerReward, decisions 1/30/143-147) and therefore removed.
   // reward.intermediation.delegated: WIRED in the same delivery
   // (reserveGuarantee).
-  // reward.mediation: WIRED in the same delivery (resolveReward).
+  // reward.mediation: WIRED in the same delivery (today asserted by the
+  // propose/approve/execute cycle of decisions 148/149).
   Capabilities.REWARD_INTERMEDIATION_OWN,
   Capabilities.MINOR_DATA_RETENTION,
   Capabilities.IDENTITY_DISCLOSURE,

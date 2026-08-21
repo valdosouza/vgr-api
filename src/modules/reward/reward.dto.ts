@@ -18,8 +18,22 @@ export const reserveRewardDto = z.object({
     .min(1),
 })
 
-export const resolveRewardDto = z.object({
+export const proposeResolutionDto = z.object({
   outcome: z.enum(['fulfilled', 'not_fulfilled']),
+  reason: z.string().min(1),
+})
+
+export const contestResolutionDto = z.object({
+  body: z.string().min(1).max(4000),
+})
+
+export const closeContestDto = z.object({
+  note: z.string().min(1).max(4000),
+})
+
+export const publishCriteriaDto = z.object({
+  version: z.string().min(1).max(32),
+  body: z.string().min(1),
 })
 
 /**

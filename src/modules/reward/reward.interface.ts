@@ -10,6 +10,8 @@ export interface RewardOfferRow {
   status: RewardOfferStatus
   railChargeId: string | null
   noReturnNoticeVersion: string
+  /** Decision 150: mediation-criteria version active at reserve time. */
+  criteriaVersion: string
   createdAt: Date
   resolvedAt: Date | null
 }
@@ -57,3 +59,48 @@ export interface ResolveContext {
 export interface OnboardContext {
   accountId: number
 }
+
+export type ResolutionStatus = 'proposed' | 'approved' | 'executed' | 'cancelled'
+
+export interface ResolutionRow {
+  id: number
+  rewardOfferId: number
+  outcome: MediationOutcome
+  reason: string
+  criteriaVersion: string
+  proposedBy: number
+  proposedAt: Date
+  approvedBy: number | null
+  approvedAt: Date | null
+  windowEndsAt: Date | null
+  executedAt: Date | null
+  status: ResolutionStatus
+}
+
+export interface CriteriaRow {
+  id: number
+  version: string
+  body: string
+  publishedBy: number
+  publishedAt: Date
+}
+
+export interface ContestRow {
+  id: number
+  resolutionId: number
+  accountId: number
+  body: string
+  status: 'open' | 'closed'
+  closedBy: number | null
+  closedNote: string | null
+  createdAt: Date
+  closedAt: Date | null
+}
+
+export type MediationEvent =
+  | 'proposed'
+  | 'approved'
+  | 'contested'
+  | 'contest_closed'
+  | 'cancelled'
+  | 'executed'
