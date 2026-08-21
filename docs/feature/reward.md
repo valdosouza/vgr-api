@@ -43,7 +43,7 @@ Mounted at `/app-reward` (app.ts, behind `appAuthMiddleware` — every route nee
 ## DELIBERATELY NOT BUILT IN THIS SLICE (documented, not silently skipped)
 - **Chargeback repasse** (decision 102) — Pix has no chargeback; only a MED (fraud) edge case exists and is unhandled.
 - **Expiration job** (decisions 89/90, pending D1) — not needed for Pix per decision 95's note; `getRewardState`'s live-check covers the seal honesty requirement (85) without one.
-- **Onboarding UI** — the API endpoint above exists (added after R0), but no mobile screen drives it yet.
+- ~~Onboarding UI~~ **BUILT in 2026-08-21**: `app/modules/reward_onboarding` in `apps/mobile` — see `app/docs/feature/reward-onboarding.md`.
 - **Non-monetary reward** (decision 1's broader concept) — out of scope for this table entirely.
 - **Growing a reservation after the fact** (e.g. a helper shows up after reserving) — decision 147 flags this as open, not MVP; today it would need cancel + a fresh offer.
 
