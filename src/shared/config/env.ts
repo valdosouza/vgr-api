@@ -66,6 +66,29 @@ export function mediaConfig(): MediaConfig {
   }
 }
 
+/**
+ * Payment rail configuration (decisions 96, 100, 143). PAYMENT_RAIL only
+ * has one value today ('asaas') — a candidate found while researching the
+ * decision-59 checklist, NOT yet the closed choice. Sandbox by default
+ * (decision 79): nothing here should touch real money without an explicit
+ * production URL.
+ */
+export interface PaymentConfig {
+  rail: 'asaas'
+  asaas: { apiUrl: string; apiKey: string; escrowDaysToExpire: number }
+}
+
+export function paymentConfig(): PaymentConfig {
+  return {
+    rail: 'asaas',
+    asaas: {
+      apiUrl: process.env.ASAAS_API_URL || 'https://api-sandbox.asaas.com',
+      apiKey: process.env.ASAAS_API_KEY ?? '',
+      escrowDaysToExpire: Number(process.env.ASAAS_ESCROW_DAYS_TO_EXPIRE ?? 30),
+    },
+  }
+}
+
 /** Boot-time validation — called by server.ts before listening. */
 export function assertRequiredEnv(): void {
   if (process.env.NODE_ENV !== 'production') return
