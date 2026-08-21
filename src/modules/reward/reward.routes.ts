@@ -22,7 +22,17 @@ const router = Router()
  *   post:
  *     summary: Reserves the guarantee via Pix against a FIXED recipient set (decisions 88/147)
  *     tags: [Reward]
+ * /app-reward/onboarding:
+ *   post:
+ *     summary: Onboards the helper as a payout recipient — KYC goes to the rail, only the opaque id is stored (decision 143)
+ *     tags: [Reward]
+ *   get:
+ *     summary: Whether this account can already be targeted by a reserve
+ *     tags: [Reward]
  */
+// Static routes first — '/:id' would otherwise swallow 'onboarding'.
+router.post('/onboarding', controller.onboard)
+router.get('/onboarding', controller.onboardingStatus)
 router.post('/:id', controller.offer)
 router.get('/:id', controller.state)
 router.post('/:id/reserve', controller.reserve)

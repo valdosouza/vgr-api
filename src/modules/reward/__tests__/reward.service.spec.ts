@@ -221,6 +221,70 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
     })
   })
 
+  describe('onboardAsRecipient (fills the NOT_AVAILABLE gap of reserveGuarantee)', () => {
+    const ONBOARD_INPUT = {
+      legalName: 'Helper One',
+      email: 'helper@example.com',
+      taxId: '22222222222',
+      mobilePhone: '11999990000',
+      monthlyIncome: 3000,
+      address: {
+        street: 'Rua A',
+        number: '10',
+        neighborhood: 'Centro',
+        postalCode: '01001000',
+      },
+    }
+
+    it('onboards at the rail and stores only the opaque recipient id', async () => {
+      mockedRepository.findRecipientProfile.mockResolvedValue(null)
+      const rail = railMock()
+      rail.onboardRecipient.mockResolvedValue({ railRecipientId: 'wallet_9' })
+      mockedPaymentRail.mockReturnValue(rail as any)
+
+      await service.onboardAsRecipient(ONBOARD_INPUT, { accountId: 8 })
+
+      expect(rail.onboardRecipient).toHaveBeenCalledWith(ONBOARD_INPUT)
+      expect(mockedRepository.insertRecipientProfile).toHaveBeenCalledWith(8, 'wallet_9')
+      expect(mockedAssertCapability).toHaveBeenCalledTimes(2)
+    })
+
+    it('rejects an account that is already onboarded', async () => {
+      mockedRepository.findRecipientProfile.mockResolvedValue({ railRecipientId: 'wallet_9' })
+
+      await expect(
+        service.onboardAsRecipient(ONBOARD_INPUT, { accountId: 8 })
+      ).rejects.toMatchObject({ statusCode: 409, code: 'DUPLICATE' })
+      expect(mockedPaymentRail).not.toHaveBeenCalled()
+    })
+
+    it('does not store a profile when the rail onboarding fails', async () => {
+      mockedRepository.findRecipientProfile.mockResolvedValue(null)
+      const rail = railMock()
+      rail.onboardRecipient.mockRejectedValue(new Error('rail down'))
+      mockedPaymentRail.mockReturnValue(rail as any)
+
+      await expect(
+        service.onboardAsRecipient(ONBOARD_INPUT, { accountId: 8 })
+      ).rejects.toThrow('rail down')
+      expect(mockedRepository.insertRecipientProfile).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('getOnboardingStatus', () => {
+    it('reports onboarded without exposing the rail id', async () => {
+      mockedRepository.findRecipientProfile.mockResolvedValue({ railRecipientId: 'wallet_9' })
+
+      expect(await service.getOnboardingStatus(8)).toEqual({ onboarded: true })
+    })
+
+    it('reports not onboarded when no profile exists', async () => {
+      mockedRepository.findRecipientProfile.mockResolvedValue(null)
+
+      expect(await service.getOnboardingStatus(8)).toEqual({ onboarded: false })
+    })
+  })
+
   describe('getRewardState (decision 85 — seal derives from the LIVE rail state)', () => {
     it('reconciles to refunded when the live state drifted (e.g. Asaas auto-expired)', async () => {
       mockedRepository.findOfferByReport.mockResolvedValue(OFFER_RESERVED)

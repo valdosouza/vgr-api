@@ -53,3 +53,7 @@ export interface ReserveContext {
 export interface ResolveContext {
   userId: number
 }
+
+export interface OnboardContext {
+  accountId: number
+}

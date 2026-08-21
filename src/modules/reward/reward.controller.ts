@@ -1,6 +1,11 @@
 import { Request, Response } from 'express'
 import * as service from '@modules/reward/reward.service'
-import { createRewardOfferDto, reserveRewardDto, resolveRewardDto } from '@modules/reward/reward.dto'
+import {
+  createRewardOfferDto,
+  onboardRecipientDto,
+  reserveRewardDto,
+  resolveRewardDto,
+} from '@modules/reward/reward.dto'
 import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
 
 /** App plane — the reporter's own actions on their report's reward. */
@@ -47,6 +52,29 @@ export async function state(req: Request, res: Response): Promise<void> {
     res.status(200).json({ ok: true, data: offer })
   } catch (err) {
     handleError(res, err, 'reward.state')
+  }
+}
+
+/** The helper's own onboarding to receive payouts — KYC goes straight to
+ *  the rail, only the opaque recipient id is kept (decision 143). */
+export async function onboard(req: Request, res: Response): Promise<void> {
+  try {
+    const body = parseBody(onboardRecipientDto, req, res)
+    if (body === null) return
+
+    await service.onboardAsRecipient(body, { accountId: req.appAccountId! })
+    res.status(201).json({ ok: true })
+  } catch (err) {
+    handleError(res, err, 'reward.onboard')
+  }
+}
+
+export async function onboardingStatus(req: Request, res: Response): Promise<void> {
+  try {
+    const status = await service.getOnboardingStatus(req.appAccountId!)
+    res.status(200).json({ ok: true, data: status })
+  } catch (err) {
+    handleError(res, err, 'reward.onboardingStatus')
   }
 }
 

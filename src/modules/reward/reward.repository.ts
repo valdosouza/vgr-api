@@ -83,6 +83,19 @@ export async function findRecipientProfile(
   return rows[0] ?? null
 }
 
+/** Stores ONLY the opaque rail id (decision 143) — the KYC data that
+ *  produced it lives at the PSP, never in a VGR table. */
+export async function insertRecipientProfile(
+  accountId: number,
+  railRecipientId: string
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO tb_reward_recipient_profile (tb_user_account_id, rail_recipient_id)
+     VALUES (?, ?)`,
+    [accountId, railRecipientId]
+  )
+}
+
 /** Decision 147: writes the fixed recipient set once, atomically with the
  *  offer's transition to 'reserved'. */
 export async function markReserved(

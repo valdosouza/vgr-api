@@ -3,12 +3,13 @@ import {
   CreateOfferContext,
   CreateOfferInput,
   MediationOutcome,
+  OnboardContext,
   ReserveContext,
   ReserveInput,
   ResolveContext,
   RewardOfferRow,
 } from '@modules/reward/reward.interface'
-import { paymentRail } from '@shared/payment/payment-rail'
+import { paymentRail, RecipientOnboardingInput } from '@shared/payment/payment-rail'
 import { assertCapability } from '@shared/legal/legal-gate'
 import { Capabilities } from '@shared/legal/capabilities'
 import { ErrorCodes } from '@shared/errors/error-codes'
@@ -29,10 +30,47 @@ import { HttpError } from '@shared/errors/http-error'
  *    MED edge case exists and is unhandled.
  *  - Expiration job (decisions 89/90, pending D1) — not needed for Pix
  *    per decision 95's note until D1 says otherwise.
- *  - Helper onboarding endpoint that produces a railRecipientId —
- *    reserveGuarantee throws a typed, catchable error when a targeted
- *    helper has none yet.
  */
+
+/**
+ * Fills the gap reserveGuarantee's NOT_AVAILABLE error points at: the
+ * helper hands their KYC data to the rail (their own PSP — decisions 60/82
+ * govern disclosure to OTHER parties, not this), which opens the subconta
+ * the split will target. The VGR stores only the opaque railRecipientId
+ * (decision 143) — none of the KYC input is persisted or logged here.
+ */
+export async function onboardAsRecipient(
+  input: RecipientOnboardingInput,
+  ctx: OnboardContext
+): Promise<void> {
+  const existing = await repository.findRecipientProfile(ctx.accountId)
+  if (existing) {
+    throw new HttpError(
+      409,
+      'This account is already onboarded to receive payouts',
+      undefined,
+      ErrorCodes.DUPLICATE
+    )
+  }
+
+  // Onboarding sends personal data to the delegated rail in order to
+  // receive money — both capabilities must be allowed in the jurisdiction
+  // before anything leaves the platform (fail-closed, decision 104).
+  await assertCapability(Capabilities.REWARD_MONETARY, { userRef: String(ctx.accountId) })
+  await assertCapability(Capabilities.REWARD_INTERMEDIATION_DELEGATED, {
+    userRef: String(ctx.accountId),
+  })
+
+  const { railRecipientId } = await paymentRail().onboardRecipient(input)
+  await repository.insertRecipientProfile(ctx.accountId, railRecipientId)
+}
+
+/** Lets the app decide whether to show the onboarding flow before the
+ *  helper is targeted by a reserve. Never exposes the rail id itself. */
+export async function getOnboardingStatus(accountId: number): Promise<{ onboarded: boolean }> {
+  const profile = await repository.findRecipientProfile(accountId)
+  return { onboarded: profile !== null }
+}
 
 export async function offerReward(
   input: CreateOfferInput,
