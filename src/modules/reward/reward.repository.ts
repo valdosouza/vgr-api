@@ -54,11 +54,6 @@ export async function findOfferByReport(reportId: number): Promise<RewardOfferRo
   return rows[0] ? toOffer(rows[0]) : null
 }
 
-export async function findOfferById(offerId: number): Promise<RewardOfferRow | null> {
-  const [rows] = await pool.query<any[]>(`${OFFER_SELECT} WHERE id = ? AND deleted = 'N'`, [offerId])
-  return rows[0] ? toOffer(rows[0]) : null
-}
-
 export async function insertOffer(input: { reportId: number; amountCents: number }): Promise<number> {
   const [result] = await pool.query<any>(
     `INSERT INTO tb_reward_offer (tb_report_id, amount_cents) VALUES (?, ?)`,

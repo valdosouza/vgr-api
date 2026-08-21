@@ -1,4 +1,4 @@
-import * as repository from '@modules/reward/reward.repository'
+﻿import * as repository from '@modules/reward/reward.repository'
 import * as service from '@modules/reward/reward.service'
 import { paymentRail } from '@shared/payment/payment-rail'
 import { assertCapability } from '@shared/legal/legal-gate'
@@ -133,7 +133,7 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
     })
   })
 
-  describe('reserveGuarantee (decision 147 — recipients fixed here)', () => {
+  describe('reserveGuarantee (decision 147 â€” recipients fixed here)', () => {
     const RESERVE_INPUT = {
       reportId: 7,
       noReturnNoticeVersion: 'v1',
@@ -227,14 +227,14 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
 
   describe('mediation discipline (decision 98, closed by 148/149/150)', () => {
     beforeEach(() => {
-      mockedRepository.findOfferById.mockResolvedValue(OFFER_RESERVED)
+      mockedRepository.findOfferByReport.mockResolvedValue(OFFER_RESERVED)
     })
 
     it('propose: records the outcome under the stamped criteria version and logs it', async () => {
       mockedRepository.findLiveResolution.mockResolvedValue(null)
       mockedRepository.insertResolution.mockResolvedValue(11)
 
-      const result = await service.proposeResolution(1, 'fulfilled', 'Condition met', { userId: 3 })
+      const result = await service.proposeResolution(7, 'fulfilled', 'Condition met', { userId: 3 })
 
       expect(result).toEqual({ resolutionId: 11 })
       expect(mockedRepository.insertResolution).toHaveBeenCalledWith(
@@ -256,22 +256,22 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
       mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_PROPOSED)
 
       await expect(
-        service.proposeResolution(1, 'fulfilled', 'again', { userId: 3 })
+        service.proposeResolution(7, 'fulfilled', 'again', { userId: 3 })
       ).rejects.toMatchObject({ statusCode: 409, code: 'DUPLICATE' })
     })
 
     it('propose: rejects an offer that is not reserved', async () => {
-      mockedRepository.findOfferById.mockResolvedValue(OFFER_OPEN)
+      mockedRepository.findOfferByReport.mockResolvedValue(OFFER_OPEN)
 
       await expect(
-        service.proposeResolution(1, 'fulfilled', 'r', { userId: 3 })
+        service.proposeResolution(7, 'fulfilled', 'r', { userId: 3 })
       ).rejects.toMatchObject({ statusCode: 422, code: 'BUSINESS_RULE' })
     })
 
     it('approve: a DIFFERENT mediator opens the contest window without touching the rail (148/149)', async () => {
       mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_PROPOSED)
 
-      const result = await service.approveResolution(1, { userId: 4 })
+      const result = await service.approveResolution(7, { userId: 4 })
 
       expect(result.windowEndsAt).toBeDefined()
       expect(mockedRepository.approveResolution).toHaveBeenCalledWith(11, 4, expect.any(Date))
@@ -281,7 +281,7 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
     it('approve: rejects the proposer approving their own proposal (decision 148)', async () => {
       mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_PROPOSED)
 
-      await expect(service.approveResolution(1, { userId: 3 })).rejects.toMatchObject({
+      await expect(service.approveResolution(7, { userId: 3 })).rejects.toMatchObject({
         statusCode: 422,
         code: 'BUSINESS_RULE',
       })
@@ -322,7 +322,7 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
         windowEndsAt: new Date(Date.now() + 60_000),
       })
 
-      await expect(service.executeResolution(1, { userId: 5 })).rejects.toMatchObject({
+      await expect(service.executeResolution(7, { userId: 5 })).rejects.toMatchObject({
         statusCode: 422,
         code: 'BUSINESS_RULE',
       })
@@ -333,7 +333,7 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
       mockedRepository.findLiveResolution.mockResolvedValue(RESOLUTION_APPROVED)
       mockedRepository.findOpenContests.mockResolvedValue([{ id: 21 } as any])
 
-      await expect(service.executeResolution(1, { userId: 5 })).rejects.toMatchObject({
+      await expect(service.executeResolution(7, { userId: 5 })).rejects.toMatchObject({
         statusCode: 422,
         code: 'BUSINESS_RULE',
       })
@@ -346,7 +346,7 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
       const rail = railMock()
       mockedPaymentRail.mockReturnValue(rail as any)
 
-      await service.executeResolution(1, { userId: 5 })
+      await service.executeResolution(7, { userId: 5 })
 
       expect(rail.capture).toHaveBeenCalledWith('pay_1')
       expect(mockedRepository.markResolved).toHaveBeenCalledWith(1, 'released')
@@ -368,13 +368,13 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
       const rail = railMock()
       mockedPaymentRail.mockReturnValue(rail as any)
 
-      await service.executeResolution(1, { userId: 5 })
+      await service.executeResolution(7, { userId: 5 })
 
       expect(rail.cancel).toHaveBeenCalledWith('pay_1')
       expect(mockedRepository.markResolved).toHaveBeenCalledWith(1, 'refunded')
     })
 
-    it('publishCriteria: rejects a duplicate version (decision 150 — versions are immutable)', async () => {
+    it('publishCriteria: rejects a duplicate version (decision 150 â€” versions are immutable)', async () => {
       mockedRepository.findCriteriaByVersion.mockResolvedValue(CRITERIA)
 
       await expect(
@@ -448,7 +448,7 @@ describe('reward.service (decisions 1/30/81-102/143-147)', () => {
     })
   })
 
-  describe('getRewardState (decision 85 — seal derives from the LIVE rail state)', () => {
+  describe('getRewardState (decision 85 â€” seal derives from the LIVE rail state)', () => {
     it('reconciles to refunded when the live state drifted (e.g. Asaas auto-expired)', async () => {
       mockedRepository.findOfferByReport.mockResolvedValue(OFFER_RESERVED)
       const rail = railMock()

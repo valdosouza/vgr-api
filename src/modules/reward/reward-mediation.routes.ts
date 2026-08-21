@@ -17,23 +17,23 @@ const router = Router()
  *   post:
  *     summary: Publishes an immutable criteria version — the one active at reserve time governs the case (decision 150)
  *     tags: [RewardMediation]
- * /api/reward-mediation/{offerId}:
+ * /api/reward-mediation/{reportId}:
  *   get:
- *     summary: Live resolution, open contests and the immutable trail for an offer
+ *     summary: Live resolution, open contests and the immutable trail for the case's reward (report and offer are 1:1)
  *     tags: [RewardMediation]
- * /api/reward-mediation/{offerId}/propose:
+ * /api/reward-mediation/{reportId}/propose:
  *   post:
  *     summary: Mediator A proposes the outcome, judged by the stamped criteria version (decision 148)
  *     tags: [RewardMediation]
- * /api/reward-mediation/{offerId}/approve:
+ * /api/reward-mediation/{reportId}/approve:
  *   post:
  *     summary: A DIFFERENT mediator approves — opens the contest window, does not touch the rail (decisions 148/149)
  *     tags: [RewardMediation]
- * /api/reward-mediation/{offerId}/cancel:
+ * /api/reward-mediation/{reportId}/cancel:
  *   post:
  *     summary: Abandons the live proposal so a new cycle can start
  *     tags: [RewardMediation]
- * /api/reward-mediation/{offerId}/execute:
+ * /api/reward-mediation/{reportId}/execute:
  *   post:
  *     summary: Window elapsed and no open contest — capture releases to the fixed set, cancel refunds the payer (decisions 100/149)
  *     tags: [RewardMediation]

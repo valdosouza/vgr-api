@@ -228,8 +228,10 @@ export async function getRewardState(reportId: number): Promise<RewardOfferRow |
  * append-only mediation log (pattern of decision 76).
  */
 
-async function reservedOffer(offerId: number): Promise<RewardOfferRow & { railChargeId: string }> {
-  const offer = await repository.findOfferById(offerId)
+/** The panel's handle is the case (report) id — same as case-freeze; the
+ *  offer is 1:1 with the report (unique key), so nothing is ambiguous. */
+async function reservedOffer(reportId: number): Promise<RewardOfferRow & { railChargeId: string }> {
+  const offer = await repository.findOfferByReport(reportId)
   if (!offer) {
     throw new HttpError(404, 'Reward offer not found', undefined, ErrorCodes.NOT_FOUND)
   }
@@ -272,13 +274,13 @@ export async function getActiveCriteria(): Promise<{ version: string; body: stri
 /** Step 1 (decision 148): mediator A proposes, judging by the criteria
  *  version stamped on the offer at reserve time (decision 150). */
 export async function proposeResolution(
-  offerId: number,
+  reportId: number,
   outcome: MediationOutcome,
   reason: string,
   ctx: ResolveContext
 ): Promise<{ resolutionId: number }> {
-  const offer = await reservedOffer(offerId)
-  if (await repository.findLiveResolution(offerId)) {
+  const offer = await reservedOffer(reportId)
+  if (await repository.findLiveResolution(offer.id)) {
     throw new HttpError(
       409,
       'A resolution is already in progress for this reward',
@@ -290,24 +292,24 @@ export async function proposeResolution(
   await assertCapability(Capabilities.REWARD_MEDIATION, { userRef: String(ctx.userId) })
 
   const resolutionId = await repository.insertResolution(
-    offerId,
+    offer.id,
     outcome,
     reason,
     offer.criteriaVersion,
     ctx.userId
   )
-  await repository.appendMediationLog(offerId, 'proposed', `user:${ctx.userId}`, outcome)
+  await repository.appendMediationLog(offer.id, 'proposed', `user:${ctx.userId}`, outcome)
   return { resolutionId }
 }
 
 /** Step 2 (decision 148): a DIFFERENT mediator approves; approval opens the
  *  contest window (decision 149), it does not touch the rail. */
 export async function approveResolution(
-  offerId: number,
+  reportId: number,
   ctx: ResolveContext
 ): Promise<{ windowEndsAt: string }> {
-  await reservedOffer(offerId)
-  const resolution = await repository.findLiveResolution(offerId)
+  const offer = await reservedOffer(reportId)
+  const resolution = await repository.findLiveResolution(offer.id)
   if (!resolution || resolution.status !== 'proposed') {
     throw new HttpError(422, 'No proposed resolution to approve', undefined, ErrorCodes.BUSINESS_RULE)
   }
@@ -326,7 +328,7 @@ export async function approveResolution(
     Date.now() + mediationContestWindowDays() * 24 * 60 * 60 * 1000
   )
   await repository.approveResolution(resolution.id, ctx.userId, windowEndsAt)
-  await repository.appendMediationLog(offerId, 'approved', `user:${ctx.userId}`, null)
+  await repository.appendMediationLog(offer.id, 'approved', `user:${ctx.userId}`, null)
   return { windowEndsAt: windowEndsAt.toISOString() }
 }
 
@@ -393,33 +395,34 @@ export async function closeContest(
 
 /** Abandoning a proposal (e.g. a contest convinced the mediators) — a new
  *  propose/approve cycle (decision 148) can then start. */
-export async function cancelResolution(offerId: number, ctx: ResolveContext): Promise<void> {
-  const resolution = await repository.findLiveResolution(offerId)
+export async function cancelResolution(reportId: number, ctx: ResolveContext): Promise<void> {
+  const offer = await reservedOffer(reportId)
+  const resolution = await repository.findLiveResolution(offer.id)
   if (!resolution) {
     throw new HttpError(422, 'No live resolution to cancel', undefined, ErrorCodes.BUSINESS_RULE)
   }
   await repository.cancelResolution(resolution.id)
-  await repository.appendMediationLog(offerId, 'cancelled', `user:${ctx.userId}`, null)
+  await repository.appendMediationLog(offer.id, 'cancelled', `user:${ctx.userId}`, null)
 }
 
 /** State for the future panel screen: the live resolution, its open
  *  contests and the full immutable trail. */
-export async function getMediationState(offerId: number): Promise<{
+export async function getMediationState(reportId: number): Promise<{
   offer: RewardOfferRow
   resolution: Awaited<ReturnType<typeof repository.findLiveResolution>>
   openContests: Awaited<ReturnType<typeof repository.findOpenContests>>
   log: Awaited<ReturnType<typeof repository.findMediationLog>>
 }> {
-  const offer = await repository.findOfferById(offerId)
+  const offer = await repository.findOfferByReport(reportId)
   if (!offer) {
     throw new HttpError(404, 'Reward offer not found', undefined, ErrorCodes.NOT_FOUND)
   }
-  const resolution = await repository.findLiveResolution(offerId)
+  const resolution = await repository.findLiveResolution(offer.id)
   return {
     offer,
     resolution,
     openContests: resolution ? await repository.findOpenContests(resolution.id) : [],
-    log: await repository.findMediationLog(offerId),
+    log: await repository.findMediationLog(offer.id),
   }
 }
 
@@ -431,9 +434,9 @@ export async function getMediationState(offerId: number): Promise<{
  * the payer (decision 100 point 3; decision 92 only forbids reversal
  * AFTER a release).
  */
-export async function executeResolution(offerId: number, ctx: ResolveContext): Promise<void> {
-  const offer = await reservedOffer(offerId)
-  const resolution = await repository.findLiveResolution(offerId)
+export async function executeResolution(reportId: number, ctx: ResolveContext): Promise<void> {
+  const offer = await reservedOffer(reportId)
+  const resolution = await repository.findLiveResolution(offer.id)
   if (!resolution || resolution.status !== 'approved' || !resolution.windowEndsAt) {
     throw new HttpError(422, 'No approved resolution to execute', undefined, ErrorCodes.BUSINESS_RULE)
   }
@@ -464,5 +467,5 @@ export async function executeResolution(offerId: number, ctx: ResolveContext): P
     await repository.markResolved(offer.id, 'refunded')
   }
   await repository.markResolutionExecuted(resolution.id)
-  await repository.appendMediationLog(offerId, 'executed', `user:${ctx.userId}`, resolution.outcome)
+  await repository.appendMediationLog(offer.id, 'executed', `user:${ctx.userId}`, resolution.outcome)
 }
