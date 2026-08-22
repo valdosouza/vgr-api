@@ -38,9 +38,10 @@ Mounted at `/app-auth` (outside `/api`, which is the panel plane).
 
 ## STATUS
 - Password registration/login, refresh rotation, revocation, provider linking rules, verification gate — DONE, 35 suites / 213 tests green.
-- **Provider verification adapters are NOT built**: `loginWithProvider` accepts an *already verified* identity, so wiring Google/Apple (OIDC JWKS) and Facebook (Graph `debug_token`) is additive and does not touch these rules. No endpoint exposes provider login until then — deliberately, so nothing can accept an unverified client token.
-- **Phone/WhatsApp OTP (decision 120) is blocked on a commercial choice**: no sending provider has been selected (same shape as the PSP pendency of decision 59). Round-6 item.
-- Email/phone verification *sending* is not built either (the panel's mailer exists; the flow is a small addition once the OTP provider question is settled).
+- **Email verification BUILT in 2026-08-22** (decision 151, closes round-6 item 2): `POST /app-auth/verify-email/send` (authenticated; silent no-op with no email or already verified) + `POST /app-auth/verify-email/confirm` `{code}`. Reuses `shared/mailer`, but keeps its **own** 6-digit code / 15-minute TTL / attempt counter on `tb_user_account` (migration 037) — the panel's `activation_key` row is never touched (decision 119 keeps the two planes separate). 5 wrong attempts wipes the code, same pattern as the panel's password recovery (decision 113). Never called on the reporting path (decision 123) — only where `assertVerifiedForConsequentialAction` already gated.
+- **Provider verification adapters are deliberately DEFERRED** (decision 152, closes round-6 item 3): `loginWithProvider` already accepts an *already verified* identity, so wiring Google/Apple (OIDC JWKS) and Facebook (Graph `debug_token`) is additive and does not touch these rules — it is waiting on real OAuth client credentials in the three consoles, not on design. No endpoint exposes provider login until then.
+- **Phone/WhatsApp OTP (decision 120) is blocked on a commercial choice**: no sending provider has been selected (same shape as the PSP pendency of decision 59). Round-6 item 1, still open.
+- Round 6 is now down to its one commercial pendency (OTP provider); see `plano-auth-usuarios.md`.
 
 ## REFERENCES
 - [**auth.md**](./auth.md): the panel plane — the other side of decision 119.

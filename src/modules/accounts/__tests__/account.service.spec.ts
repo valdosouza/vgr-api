@@ -315,6 +315,84 @@ describe('account.service', () => {
     })
   })
 
+  describe('email verification (decision 151)', () => {
+    it('stores a fresh code and sends it via the reused mailer', async () => {
+      mockedRepository.findAccountById.mockResolvedValue(account({ emailVerified: false }))
+
+      await service.sendEmailVerification(1)
+
+      expect(mockedRepository.setEmailVerificationCode).toHaveBeenCalledWith(
+        1,
+        expect.stringMatching(/^\d{6}$/)
+      )
+    })
+
+    it('is a silent no-op when the account has no email', async () => {
+      mockedRepository.findAccountById.mockResolvedValue(account({ email: null }))
+
+      await service.sendEmailVerification(1)
+
+      expect(mockedRepository.setEmailVerificationCode).not.toHaveBeenCalled()
+    })
+
+    it('is a silent no-op when the email is already verified', async () => {
+      mockedRepository.findAccountById.mockResolvedValue(account({ emailVerified: true }))
+
+      await service.sendEmailVerification(1)
+
+      expect(mockedRepository.setEmailVerificationCode).not.toHaveBeenCalled()
+    })
+
+    it('confirms with the right code inside the window', async () => {
+      mockedRepository.getEmailVerificationInfo.mockResolvedValue({
+        code: '123456',
+        ageMinutes: 1,
+      })
+
+      await service.confirmEmailVerification(1, '123456')
+
+      expect(mockedRepository.markEmailVerified).toHaveBeenCalledWith(1)
+    })
+
+    it('rejects a wrong code and counts the attempt (decision 113 pattern)', async () => {
+      mockedRepository.getEmailVerificationInfo.mockResolvedValue({
+        code: '123456',
+        ageMinutes: 1,
+      })
+
+      await expect(service.confirmEmailVerification(1, '000000')).rejects.toMatchObject({
+        statusCode: 401,
+        code: 'UNAUTHORIZED',
+      })
+      expect(mockedRepository.registerEmailVerificationAttempt).toHaveBeenCalledWith(1)
+      expect(mockedRepository.markEmailVerified).not.toHaveBeenCalled()
+    })
+
+    it('rejects an expired code without counting an attempt against a dead code', async () => {
+      mockedRepository.getEmailVerificationInfo.mockResolvedValue({
+        code: '123456',
+        ageMinutes: 999,
+      })
+
+      await expect(service.confirmEmailVerification(1, '123456')).rejects.toMatchObject({
+        statusCode: 401,
+      })
+      expect(mockedRepository.markEmailVerified).not.toHaveBeenCalled()
+    })
+
+    it('rejects when there is no code pending, without ever calling attempt bookkeeping', async () => {
+      mockedRepository.getEmailVerificationInfo.mockResolvedValue({
+        code: null,
+        ageMinutes: 0,
+      })
+
+      await expect(service.confirmEmailVerification(1, '123456')).rejects.toMatchObject({
+        statusCode: 401,
+      })
+      expect(mockedRepository.registerEmailVerificationAttempt).not.toHaveBeenCalled()
+    })
+  })
+
   describe('verification gate (decision 123)', () => {
     it('blocks a consequential action while neither email nor phone is verified', async () => {
       mockedRepository.findAccountById.mockResolvedValue(account())

@@ -30,6 +30,10 @@ export const providerLoginDto = z.object({
   idToken: z.string().min(20),
 })
 
+export const confirmEmailVerificationDto = z.object({
+  code: z.string().regex(/^\d{6}$/),
+})
+
 export type AccountRegisterInput = z.infer<typeof accountRegisterDto>
 export type AccountLoginInput = z.infer<typeof accountLoginDto>
 export type ProviderLoginInput = z.infer<typeof providerLoginDto>

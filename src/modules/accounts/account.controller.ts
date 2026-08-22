@@ -3,6 +3,7 @@ import { handleError, parseBody } from '@shared/http/controller-utils'
 import {
   accountLoginDto,
   accountRegisterDto,
+  confirmEmailVerificationDto,
   refreshDto,
 } from '@modules/accounts/account.dto'
 import * as service from '@modules/accounts/account.service'
@@ -46,5 +47,27 @@ export async function signOutEverywhere(req: Request, res: Response) {
     res.status(200).json({ ok: true, data: { revoked: true } })
   } catch (err) {
     handleError(res, err, 'app-auth sign-out POST')
+  }
+}
+
+/** Always 200 — never reveals whether an email was already verified or
+ *  absent (decision 151). */
+export async function sendEmailVerification(req: Request, res: Response) {
+  try {
+    await service.sendEmailVerification(req.appAccountId!)
+    res.status(200).json({ ok: true, data: { sent: true } })
+  } catch (err) {
+    handleError(res, err, 'app-auth verify-email/send POST')
+  }
+}
+
+export async function confirmEmailVerification(req: Request, res: Response) {
+  const body = parseBody(confirmEmailVerificationDto, req, res)
+  if (body === null) return
+  try {
+    await service.confirmEmailVerification(req.appAccountId!, body.code)
+    res.status(200).json({ ok: true, data: { verified: true } })
+  } catch (err) {
+    handleError(res, err, 'app-auth verify-email/confirm POST')
   }
 }

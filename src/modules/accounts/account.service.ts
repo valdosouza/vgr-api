@@ -1,3 +1,4 @@
+import { randomInt } from 'crypto'
 import bcrypt from 'bcryptjs'
 import * as repository from '@modules/accounts/account.repository'
 import {
@@ -15,8 +16,10 @@ import {
 import { decryptEnvelope } from '@shared/crypto/envelope'
 import { computeLoginDelayMs, sleep } from '@shared/security/login-delay'
 import { verifyTotp } from '@shared/security/totp'
+import { isMailerConfigured, sendMail } from '@shared/mailer/mailer'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
+import logger from '@shared/logger/logger'
 
 /**
  * App user accounts — reporters and helpers (decisions 119-124).
@@ -275,6 +278,69 @@ export async function refreshSession(refreshToken: string): Promise<AppSession> 
 export async function revokeAllSessions(accountId: number): Promise<void> {
   await repository.bumpSessionVersion(accountId)
   await repository.revokeAllRefreshTokens(accountId)
+}
+
+// ------------------------------------------------ email verification
+
+const EMAIL_VERIFICATION_TTL_MINUTES = 15
+
+/** Reuses the panel's mailer (decision 151) but never its activation-key
+ *  row — the app plane keeps its own code/TTL/attempt state (decision 119
+ *  keeps the two planes' auth state fully separate). Silent no-op when the
+ *  account has no email or is already verified: never reveal state through
+ *  timing/response, and there is nothing consequential blocked on it yet
+ *  (decision 123 — reporting never needed this in the first place). */
+export async function sendEmailVerification(accountId: number): Promise<void> {
+  const account = await repository.findAccountById(accountId)
+  if (!account || !account.email || account.emailVerified) return
+
+  const code = String(randomInt(100000, 1000000))
+  await repository.setEmailVerificationCode(account.id, code)
+
+  try {
+    await sendMail({
+      to: account.email,
+      subject: 'VGR — confirme seu e-mail',
+      text: `Seu código de verificação é ${code} (válido por ${EMAIL_VERIFICATION_TTL_MINUTES} minutos).`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+          <h2>Confirme seu e-mail</h2>
+          <p>Use o código abaixo no app. Ele vale por
+             <strong>${EMAIL_VERIFICATION_TTL_MINUTES} minutos</strong>.</p>
+          <p style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center">${code}</p>
+        </div>`,
+    })
+  } catch (err) {
+    logger.error('Failed to send app email verification', { accountId, err })
+  }
+
+  if (!isMailerConfigured()) {
+    logger.info('App email verification code (dev mode, no SMTP)', { accountId, code })
+  }
+}
+
+/** Same generic 401 for a wrong code, an expired one, or no code pending —
+ *  never signals which (same shape as the panel's recovery flow). */
+function invalidVerificationCode(): HttpError {
+  return new HttpError(401, 'Invalid or expired code', undefined, ErrorCodes.UNAUTHORIZED)
+}
+
+export async function confirmEmailVerification(accountId: number, code: string): Promise<void> {
+  const info = await repository.getEmailVerificationInfo(accountId)
+  if (!info || !info.code || info.code !== code) {
+    // Wrong code counts; the 5th wipes the code entirely (decision 113's
+    // pattern) — brute force against the 10^6 space dies without locking
+    // the account out of anything else.
+    if (info?.code) {
+      await repository.registerEmailVerificationAttempt(accountId)
+    }
+    throw invalidVerificationCode()
+  }
+  if (info.ageMinutes > EMAIL_VERIFICATION_TTL_MINUTES) {
+    throw invalidVerificationCode()
+  }
+
+  await repository.markEmailVerified(accountId)
 }
 
 // ----------------------------------------------------------- assurance

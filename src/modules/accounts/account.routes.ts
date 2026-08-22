@@ -31,6 +31,14 @@ const router = Router()
  *     summary: Rotates the refresh token; reuse revokes the whole family (decision 122)
  *     security: []
  *     tags: [AppAuth]
+ * /app-auth/verify-email/send:
+ *   post:
+ *     summary: Sends a 6-digit email verification code, reusing the panel's mailer (decision 151)
+ *     tags: [AppAuth]
+ * /app-auth/verify-email/confirm:
+ *   post:
+ *     summary: Confirms the code — required before consequential actions, never before reporting (decision 123)
+ *     tags: [AppAuth]
  */
 router.post('/register', controller.register)
 router.post('/login', controller.login)
@@ -38,5 +46,7 @@ router.post('/refresh', controller.refresh)
 
 // Authenticated app-plane routes.
 router.post('/sign-out-everywhere', appAuthMiddleware, controller.signOutEverywhere)
+router.post('/verify-email/send', appAuthMiddleware, controller.sendEmailVerification)
+router.post('/verify-email/confirm', appAuthMiddleware, controller.confirmEmailVerification)
 
 export default router

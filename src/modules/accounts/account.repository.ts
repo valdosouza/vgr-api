@@ -68,13 +68,21 @@ export async function setPasswordHash(id: number, passwordHash: string): Promise
 }
 
 export async function markEmailVerified(id: number): Promise<void> {
-  await pool.query(`UPDATE tb_user_account SET email_verified = 'S' WHERE id = ?`, [id])
+  await pool.query(
+    `UPDATE tb_user_account
+     SET email_verified = 'S', email_verification_code = NULL, email_verification_attempts = 0
+     WHERE id = ?`,
+    [id]
+  )
 }
 
 /** Decision 121: changing the email drops the verified flag on both sides. */
 export async function changeEmail(id: number, email: string): Promise<void> {
   await pool.query(
-    `UPDATE tb_user_account SET email = ?, email_verified = 'N' WHERE id = ?`,
+    `UPDATE tb_user_account
+     SET email = ?, email_verified = 'N', email_verification_code = NULL,
+         email_verification_attempts = 0
+     WHERE id = ?`,
     [email, id]
   )
 }
@@ -95,6 +103,54 @@ export async function bumpSessionVersion(id: number): Promise<void> {
     `UPDATE tb_user_account SET session_version = session_version + 1 WHERE id = ?`,
     [id]
   )
+}
+
+// ------------------------------------------------- email verification
+
+/** Stores the 6-digit code; sent_at marks the start of its window. A fresh
+ *  code resets the attempt counter (decisions 113/151). */
+export async function setEmailVerificationCode(id: number, code: string): Promise<void> {
+  await pool.query(
+    `UPDATE tb_user_account
+     SET email_verification_code = ?, email_verification_attempts = 0,
+         email_verification_sent_at = NOW()
+     WHERE id = ?`,
+    [code, id]
+  )
+}
+
+export async function getEmailVerificationInfo(
+  id: number
+): Promise<{ code: string | null; ageMinutes: number } | null> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT email_verification_code AS code,
+            TIMESTAMPDIFF(MINUTE, email_verification_sent_at, NOW()) AS ageMinutes
+     FROM tb_user_account WHERE id = ? AND deleted = 'N'`,
+    [id]
+  )
+  return rows[0] ?? null
+}
+
+/** Returns the new attempt count; at 5 the code itself is wiped
+ *  (decision 113's pattern, applied here by decision 151). */
+export async function registerEmailVerificationAttempt(id: number): Promise<number> {
+  await pool.query(
+    `UPDATE tb_user_account SET email_verification_attempts = email_verification_attempts + 1
+     WHERE id = ?`,
+    [id]
+  )
+  const [rows] = await pool.query<any[]>(
+    `SELECT email_verification_attempts AS count FROM tb_user_account WHERE id = ?`,
+    [id]
+  )
+  const count = rows[0]?.count ?? 0
+  if (count >= 5) {
+    await pool.query(
+      `UPDATE tb_user_account SET email_verification_code = NULL WHERE id = ?`,
+      [id]
+    )
+  }
+  return count
 }
 
 // ------------------------------------------------------------ providers
