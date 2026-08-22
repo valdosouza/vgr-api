@@ -47,3 +47,4 @@ Mounted at `/app-auth` (outside `/api`, which is the panel plane).
 - [**auth.md**](./auth.md): the panel plane — the other side of decision 119.
 - [**legal-gate.md**](./legal-gate.md): `requireCapability`, which will stack on app routes carrying legal risk.
 - [**ARCHITECTURE.md**](../adr/ARCHITECTURE.md): module pattern.
+- `app/docs/feature/app-auth.md`: the mobile screens driving this API (register/login/verify-email/sign-out, session persistence, entry points).
