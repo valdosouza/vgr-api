@@ -4,9 +4,11 @@ import {
   accountLoginDto,
   accountRegisterDto,
   confirmEmailVerificationDto,
+  providerLoginDto,
   refreshDto,
 } from '@modules/accounts/account.dto'
 import * as service from '@modules/accounts/account.service'
+import { verifyProviderToken } from '@shared/auth/social-verifier'
 
 export async function register(req: Request, res: Response) {
   const body = parseBody(accountRegisterDto, req, res)
@@ -26,6 +28,21 @@ export async function login(req: Request, res: Response) {
     res.status(200).json({ ok: true, data: session })
   } catch (err) {
     handleError(res, err, 'app-auth login POST')
+  }
+}
+
+/** The client sends the provider's raw token; this is the only place it is
+ *  ever accepted un-verified — `verifyProviderToken` checks it against the
+ *  provider (JWKS) before the domain ever sees an identity (decision 119). */
+export async function loginWithProvider(req: Request, res: Response) {
+  const body = parseBody(providerLoginDto, req, res)
+  if (body === null) return
+  try {
+    const identity = await verifyProviderToken(body.provider, body.idToken)
+    const session = await service.loginWithProvider(identity)
+    res.status(200).json({ ok: true, data: session })
+  } catch (err) {
+    handleError(res, err, 'app-auth login-provider POST')
   }
 }
 

@@ -6,11 +6,10 @@ import * as controller from '@modules/accounts/account.controller'
  * App-plane auth (decisions 119-124), mounted under /app-auth — outside
  * /api, which is the panel plane guarded by authMiddleware.
  *
- * ⚠️ Provider login (Google/Apple/Facebook) and phone/WhatsApp OTP are NOT
- * here yet: both need an external verification adapter, and the OTP one
- * needs a commercial decision that has not been made (see the round-6
- * pending item). The domain side is built — `loginWithProvider` accepts an
- * already-verified identity — so wiring a verifier is additive.
+ * ⚠️ Phone/WhatsApp OTP is NOT here: it needs a commercial decision that
+ * has not been made (round-6 pending item 1). Google login IS wired
+ * (decision 152) — Apple/Facebook still answer 422 `NOT_AVAILABLE` from
+ * `verifyProviderToken` until their credentials exist.
  */
 const router = Router()
 
@@ -24,6 +23,11 @@ const router = Router()
  * /app-auth/login:
  *   post:
  *     summary: Email+password login, optional TOTP; returns access + rotating refresh (decisions 122, 124)
+ *     security: []
+ *     tags: [AppAuth]
+ * /app-auth/login-provider:
+ *   post:
+ *     summary: Social login (Google wired; Apple/Facebook 422 NOT_AVAILABLE) — verifies the token server-side (decisions 119/152)
  *     security: []
  *     tags: [AppAuth]
  * /app-auth/refresh:
@@ -42,6 +46,7 @@ const router = Router()
  */
 router.post('/register', controller.register)
 router.post('/login', controller.login)
+router.post('/login-provider', controller.loginWithProvider)
 router.post('/refresh', controller.refresh)
 
 // Authenticated app-plane routes.
