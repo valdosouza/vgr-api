@@ -6,6 +6,7 @@ import { isMailerConfigured, sendMail } from '@shared/mailer/mailer'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
 import logger from '@shared/logger/logger'
+import { devSecretLoggingEnabled } from '@shared/config/env'
 
 /**
  * Password recovery for team users (phase 2 of the admin-controls plan;
@@ -49,7 +50,10 @@ export async function recoveryPassword(email: string): Promise<void> {
     // Keep going: the code is stored; in dev it is logged below.
   }
 
-  if (!isMailerConfigured()) {
+  // Decision 110: a missing SMTP config is not consent to log a secret — it
+  // just as easily means a misconfigured prod box or CI as a dev laptop.
+  // Seeing the code locally requires the explicit LOG_DEV_SECRETS opt-in.
+  if (!isMailerConfigured() && devSecretLoggingEnabled()) {
     logger.info('Password recovery code (dev mode, no SMTP)', { email, code })
   }
 }

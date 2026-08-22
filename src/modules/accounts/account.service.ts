@@ -20,6 +20,7 @@ import { isMailerConfigured, sendMail } from '@shared/mailer/mailer'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
 import logger from '@shared/logger/logger'
+import { devSecretLoggingEnabled } from '@shared/config/env'
 
 /**
  * App user accounts — reporters and helpers (decisions 119-124).
@@ -314,7 +315,10 @@ export async function sendEmailVerification(accountId: number): Promise<void> {
     logger.error('Failed to send app email verification', { accountId, err })
   }
 
-  if (!isMailerConfigured()) {
+  // Decision 110: a missing SMTP config is not consent to log a secret — it
+  // just as easily means a misconfigured prod box or CI as a dev laptop.
+  // Seeing the code locally requires the explicit LOG_DEV_SECRETS opt-in.
+  if (!isMailerConfigured() && devSecretLoggingEnabled()) {
     logger.info('App email verification code (dev mode, no SMTP)', { accountId, code })
   }
 }

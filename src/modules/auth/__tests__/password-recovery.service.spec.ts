@@ -1,14 +1,17 @@
 import bcrypt from 'bcryptjs'
 import * as repository from '@modules/auth/admin-account.repository'
 import * as mailer from '@shared/mailer/mailer'
+import logger from '@shared/logger/logger'
 import { changePassword, recoveryPassword } from '@modules/auth/password-recovery.service'
 import { HttpError } from '@shared/errors/http-error'
 
 jest.mock('@modules/auth/admin-account.repository')
 jest.mock('@shared/mailer/mailer')
+jest.mock('@shared/logger/logger')
 
 const mockedRepository = repository as jest.Mocked<typeof repository>
 const mockedMailer = mailer as jest.Mocked<typeof mailer>
+const mockedLogger = logger as jest.Mocked<typeof logger>
 
 const account = { id: 1, email: 'valdo@vgr.com.br', passwordHash: 'x', active: 'S' as const, sessionVersion: 1, failedLoginCount: 0, totpSecret: null, totpEnabled: 'N' as const }
 
@@ -16,6 +19,7 @@ describe('password-recovery.service recoveryPassword', () => {
   beforeEach(() => {
     jest.resetAllMocks()
     mockedMailer.isMailerConfigured.mockReturnValue(false)
+    delete process.env.LOG_DEV_SECRETS
   })
 
   it('stores a 6-digit code and emails it for an active account', async () => {
@@ -44,12 +48,35 @@ describe('password-recovery.service recoveryPassword', () => {
     expect(mockedRepository.setActivationKey).not.toHaveBeenCalled()
   })
 
-  it('still stores the code even when the email send fails (code goes to log in dev)', async () => {
+  it('still stores the code even when the email send fails', async () => {
     mockedRepository.findAdminAccountByEmail.mockResolvedValue(account)
     mockedMailer.sendMail.mockRejectedValue(new Error('smtp down'))
 
     await expect(recoveryPassword('valdo@vgr.com.br')).resolves.toBeUndefined()
     expect(mockedRepository.setActivationKey).toHaveBeenCalled()
+  })
+
+  it('never logs the raw recovery code — no SMTP configured is not consent to log a secret (decision 110)', async () => {
+    mockedRepository.findAdminAccountByEmail.mockResolvedValue(account)
+
+    await recoveryPassword('valdo@vgr.com.br')
+
+    for (const call of [...mockedLogger.info.mock.calls, ...mockedLogger.warn.mock.calls, ...mockedLogger.error.mock.calls]) {
+      const meta = call[1]
+      expect(meta && typeof meta === 'object' ? JSON.stringify(meta) : '').not.toMatch(/\d{6}/)
+    }
+  })
+
+  it('logs the code only when a developer explicitly opts in via LOG_DEV_SECRETS', async () => {
+    process.env.LOG_DEV_SECRETS = 'true'
+    mockedRepository.findAdminAccountByEmail.mockResolvedValue(account)
+
+    await recoveryPassword('valdo@vgr.com.br')
+
+    expect(mockedLogger.info).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ code: expect.stringMatching(/^\d{6}$/) })
+    )
   })
 })
 

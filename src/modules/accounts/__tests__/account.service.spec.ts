@@ -9,10 +9,13 @@ import {
 import { verifyAppAccessToken } from '@shared/auth/app-session'
 import { encryptEnvelope } from '@shared/crypto/envelope'
 import { currentTotp, generateTotpSecret } from '@shared/security/totp'
+import logger from '@shared/logger/logger'
 
 jest.mock('@modules/accounts/account.repository')
+jest.mock('@shared/logger/logger')
 
 const mockedRepository = repository as jest.Mocked<typeof repository>
+const mockedLogger = logger as jest.Mocked<typeof logger>
 
 function account(overrides: Partial<UserAccountRow> = {}): UserAccountRow {
   return {
@@ -341,6 +344,31 @@ describe('account.service', () => {
       await service.sendEmailVerification(1)
 
       expect(mockedRepository.setEmailVerificationCode).not.toHaveBeenCalled()
+    })
+
+    it('never logs the raw verification code — no SMTP configured is not consent to log a secret (decision 110)', async () => {
+      delete process.env.LOG_DEV_SECRETS
+      mockedRepository.findAccountById.mockResolvedValue(account({ emailVerified: false }))
+
+      await service.sendEmailVerification(1)
+
+      for (const call of [...mockedLogger.info.mock.calls, ...mockedLogger.warn.mock.calls, ...mockedLogger.error.mock.calls]) {
+        const meta = call[1]
+        expect(meta && typeof meta === 'object' ? JSON.stringify(meta) : '').not.toMatch(/\d{6}/)
+      }
+    })
+
+    it('logs the verification code only when a developer explicitly opts in via LOG_DEV_SECRETS', async () => {
+      process.env.LOG_DEV_SECRETS = 'true'
+      mockedRepository.findAccountById.mockResolvedValue(account({ emailVerified: false }))
+
+      await service.sendEmailVerification(1)
+
+      expect(mockedLogger.info).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ code: expect.stringMatching(/^\d{6}$/) })
+      )
+      delete process.env.LOG_DEV_SECRETS
     })
 
     it('confirms with the right code inside the window', async () => {

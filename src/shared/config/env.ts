@@ -29,6 +29,17 @@ export function allowedOrigins(): string[] {
 }
 
 /**
+ * Decision 110 gap fix: "no SMTP configured" used to be treated as "we're in
+ * dev, log the raw OTP/verification code" — but that's also what a
+ * misconfigured production box, or CI, looks like. A code reaching a log
+ * must now be an explicit, deliberate opt-in, never a side effect of a
+ * missing env var.
+ */
+export function devSecretLoggingEnabled(): boolean {
+  return process.env.LOG_DEV_SECRETS === 'true'
+}
+
+/**
  * Media storage configuration (decisions 126/127/129). Limits live in env,
  * not code (decision 129); the blob backend is selected here so swapping
  * MinIO for a paid provider is a config change (decision 126).

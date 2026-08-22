@@ -4,6 +4,23 @@
 **Project:** api
 **Framework:** Jest 29 + ts-jest, supertest (per `docs/adr/TESTS.md`)
 
+> **Amended, 2026-08-22** (invariant 5 — specs são vinculantes, emenda antes
+> de divergir): este arquivo nunca teve nenhum item riscado e ficou parado
+> desde o MVP original, enquanto ~120 decisões subsequentes (81–152)
+> reformularam pagamento, recompensa, auth e adiaram outras frentes. Uma
+> auditoria de disciplina de TDD (2026-08-22) achou 3 agregados aqui —
+> `DirectionEstimate`, `ChatThread`, `HelperRating` — com zero ocorrência no
+> código atual. Em vez de reescrever o arquivo inteiro (o que apagaria o
+> registro do desenho original), cada seção divergente abaixo ganhou uma nota
+> `Amended` própria, apontando pro estado real. **Não usar este arquivo como
+> checklist literal** — para o estado atual por frente, ver
+> [`VGR-RESUMO.md` §4](../../../../AI/docs/decisions/VGR-RESUMO.md). O
+> restante do arquivo (Report, HelpOffer, UserAccount, AccountabilityLogEntry,
+> AdminAccount, RiskTierConfig, CategoryFormSchema, FeeRule,
+> DualControlAccessRequest, responder-pool) segue batendo com o código e
+> continua vinculante. Reward, PanicAlert e a autenticação por provedor têm
+> nota própria mais abaixo — mudaram de desenho, não sumiram.
+
 ## 1. Unit Tests
 
 ### 1.1 Aggregates and Aggregate Roots
@@ -25,11 +42,20 @@
 - [ ] Should emit HelpOfferSubmitted when creation succeeds
 
 **DirectionEstimate**
+> **Amended, 2026-08-22**: direction sightings (decisões 22/26/27) é frente
+> ainda não aberta (`VGR-RESUMO.md` §6) — nenhum código existe para este
+> agregado. Cenários abaixo mantidos como desenho original para quando a
+> frente abrir, não como trabalho pendente ativo.
 - [ ] Should initialize DirectionEstimate with an even 50/50 prior between the two reported directions when the first Sighting arrives
 - [ ] Should reweight probabilityByDirection when applySighting() is called with an additional Sighting
 - [ ] Should reject a weight update that would make probabilityByDirection sum to a value other than 1.0
 
 **Reward**
+> **Amended, 2026-08-22**: o domínio Reward foi reconstruído do zero como R0
+> sobre a *port* `PaymentRail` (decisões 96/143/147–150) — split, custódia,
+> mediação com duplo controle e janela de contestação. Os cenários abaixo são
+> o desenho pré-R0 e não descrevem o `reward.service.ts` atual; ver
+> `api/docs/feature/reward.md` para o comportamento vinculante hoje.
 - [ ] Should create Reward successfully when offer is one of money, perk, reciprocity, or none
 - [ ] Should reject Reward creation when the Reporter's AnonymityMode is anonymous (decision 33)
 - [ ] Should reject allocate() when the target Report is not yet Resolved
@@ -71,18 +97,34 @@
 - [ ] Should fall back to the global default rule when the requested Category has no rule of its own
 
 **HelperRating**
+> **Amended, 2026-08-22**: rating (decisão 48) é frente ainda não aberta
+> (`VGR-RESUMO.md` §6) — nenhum código existe para este agregado. Cenários
+> abaixo mantidos como desenho original para quando a frente abrir.
 - [ ] Should persist against the Helper's internal id even when the Helper was anonymous to the Reporter
 - [ ] Should reject a second rating on the same HelpOffer from the same Reporter
 
 **PanicAlert**
+> **Amended, 2026-08-22**: só o pré-requisito existe hoje —
+> `src/modules/panic/responder-pool.*` (quem é respondedor autorizado, ver
+> pendência 3 no `VGR-RESUMO.md` §6). O `PanicAlert`/`trigger()` propriamente
+> dito (decisões 51/62–65) é frente ainda não aberta; cenários abaixo são o
+> desenho original para essa parte pendente.
 - [ ] Should reject trigger() when recipients resolves to an empty set even after defaulting to the responder pool
 - [ ] Should accept trigger() with only a trusted contact configured, no pool membership required
 
 **ChatThread**
+> **Amended, 2026-08-22**: chat mascarado (decisão 54) é frente ainda não
+> aberta (`VGR-RESUMO.md` §6) — nenhum código existe para este agregado.
+> Cenários abaixo mantidos como desenho original para quando a frente abrir.
 - [ ] Should resolve every participant through MaskedIdentity before persisting a message — never a raw UserId
 - [ ] Should generate a distinct MaskedIdentity token per (ChatThread, UserId) pair, never reused across Reports
 
 **PaymentIntent**
+> **Amended, 2026-08-22**: substituído pela *port* `PaymentRail` + adapter
+> Asaas (decisões 96/143) — não existe uma entidade `PaymentIntent` no código
+> atual. O veto de `peer_to_peer` em tier alto (decisão 58) está implementado
+> e testado, mas na camada `monetization-config`/`fee-rule.service.ts`, não
+> aqui; ver `api/docs/feature/payment-rail.md`.
 - [ ] Should reject confirm() with mode=peer_to_peer when the Report's RiskTierConfig is high
 - [ ] Should accept confirm() with mode=peer_to_peer when the Report's RiskTierConfig is low or medium
 
@@ -208,15 +250,26 @@
 - [ ] Should rollback fully without leaving inconsistent state if persistence fails mid-allocation
 
 **AuthenticateWithProvider → UserAccountRepository**
+> **Amended, 2026-08-22**: implementado como endpoints separados, não um
+> único use case parametrizado por provider — `POST /register` e
+> `POST /login` (e-mail+senha, decisão 151), `POST /login-provider` (Google
+> apenas, só Android — decisão 152; Apple/Facebook adiados até haver
+> credencial OAuth real). O provider de OTP (decisão comercial, pendência 1
+> do `VGR-RESUMO.md` §6) segue não implementado — sem endpoint. Ver
+> `api/docs/feature/app-auth.md`.
 - [ ] Should execute AuthenticateWithProvider → provider token verified → UserAccount upserted → UserAuthenticated emitted → JWT issued, for each of Google, Apple, Facebook
 - [ ] Should reject before any persistence when the provider token fails verification
 - [ ] Should execute the OTP variant → code verified against a non-expired, unused record → JWT issued
 
 **TriggerPanicAlert → PanicAlertRepository**
+> **Amended, 2026-08-22**: mesmo estado de `PanicAlert` acima — só o
+> responder-pool (pré-requisito) existe; este use case ainda não tem código.
 - [ ] Should execute TriggerPanicAlert → recipients resolved (config or default pool) → PanicAlertTriggered emitted → persisted
 - [ ] Should execute end-to-end for a cold trigger (no prior configuration) and still resolve to the responder pool
 
 **ProcessRewardPayment → PaymentIntentRepository**
+> **Amended, 2026-08-22**: mesma observação do `PaymentIntent` acima —
+> substituído pelo domínio Reward R0 sobre `PaymentRail`/Asaas.
 - [ ] Should execute ProcessRewardPayment → RiskTier checked → intermediated path taken → PaymentIntentConfirmed emitted, for a high-tier Report
 - [ ] Should reject before any persistence when a peer_to_peer PaymentIntent is attempted on a high-tier Report
 
@@ -270,6 +323,11 @@
   - When: `POST /api/rewards/:id/allocate` is called by the Reporter with a subset of claimIds
   - Then: response is 200; RewardAllocated is emitted with the chosen claimIds
 
+> **Amended, 2026-08-22** (next 2 items): endpoints reais são
+> `POST /login-provider` (só Google, só Android) e `POST /register`+
+> `POST /login` (e-mail+senha); OTP segue sem endpoint (pendência comercial).
+> Ver a nota da seção 2.2 acima.
+
 - [ ] **Should issue a JWT when a user authenticates with Google, Apple, or Facebook**
   - Given: a valid provider token obtained from the client SDK
   - When: `POST /auth/login` is called with `{ provider, token }`
@@ -310,10 +368,15 @@
   - When: `POST /api/panic/responder-pool` is called by that user, then `PUT /api/panic/responder-pool/:id/resolve` with `{ approved: true }` is called by an admin
   - Then: the first response is 201 with status=pending; the second is 200 and the membership no longer appears in the admin's pending list
 
+> **Amended, 2026-08-22**: `POST /api/panic/trigger` não existe — só o
+> responder-pool (pré-requisito) está implementado.
+
 - [ ] **Should trigger a panic alert and resolve to the responder pool when unconfigured**
   - Given: a user with no PanicAlert configuration saved
   - When: `POST /api/panic/trigger` is called
   - Then: response is 201; PanicAlertTriggered is emitted with the active responder pool as recipients (decision 65)
+
+> **Amended, 2026-08-22**: chat mascarado ainda não implementado.
 
 - [ ] **Should post and retrieve masked chat messages on a Report's thread**
   - Given: an existing Report with a HelpOffer from Helper H

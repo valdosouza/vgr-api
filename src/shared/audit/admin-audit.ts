@@ -1,6 +1,7 @@
 import { Request } from 'express'
 import pool from '@shared/db/connection'
 import logger from '@shared/logger/logger'
+import { redact } from '@shared/logger/redact'
 
 /**
  * Administrative audit trail (decision 116, SEC-6) — who did what, when,
@@ -19,19 +20,6 @@ import logger from '@shared/logger/logger'
  *  using the other actions. */
 export type AuditAction = 'create' | 'update' | 'delete' | 'grant' | 'state_change' | 'read'
 
-/** Decision 110: no secret ever reaches a log — this table included. */
-function sanitize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sanitize)
-  if (value && typeof value === 'object') {
-    const clean: Record<string, unknown> = {}
-    for (const [key, entry] of Object.entries(value)) {
-      clean[key] = /password|secret|token|key/i.test(key) ? '[redacted]' : sanitize(entry)
-    }
-    return clean
-  }
-  return value
-}
-
 export function auditAdminAction(entry: {
   actorId: number
   action: AuditAction
@@ -49,7 +37,7 @@ export function auditAdminAction(entry: {
         entry.action,
         entry.entity,
         entry.entityId === undefined ? null : String(entry.entityId),
-        entry.summary === undefined ? null : JSON.stringify(sanitize(entry.summary)),
+        entry.summary === undefined ? null : JSON.stringify(redact(entry.summary)),
         entry.ip ?? null,
       ]
     )
