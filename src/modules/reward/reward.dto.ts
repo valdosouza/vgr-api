@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { brTaxIdSchema } from './br-tax-id'
 
 export const createRewardOfferDto = z.object({
   amountCents: z.number().int().positive(),
@@ -6,7 +7,8 @@ export const createRewardOfferDto = z.object({
 
 export const reserveRewardDto = z.object({
   noReturnNoticeVersion: z.string().min(1),
-  payerTaxId: z.string().min(11).max(14),
+  /** Decision 155: check digits verified, digits only. */
+  payerTaxId: brTaxIdSchema,
   payerName: z.string().min(1),
   recipients: z
     .array(
@@ -46,7 +48,8 @@ export const publishCriteriaDto = z.object({
 export const onboardRecipientDto = z.object({
   legalName: z.string().min(1),
   email: z.string().email(),
-  taxId: z.string().min(11).max(14),
+  /** Decision 155: check digits verified, digits only. */
+  taxId: brTaxIdSchema,
   mobilePhone: z.string().min(10).max(13),
   monthlyIncome: z.number().positive(),
   address: z.object({

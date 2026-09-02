@@ -57,6 +57,12 @@ function fieldCodeOf(issue: z.ZodIssue): { code: string; params?: Record<string,
         : { code: FieldErrorCodes.INVALID_FORMAT }
     case 'invalid_enum_value':
       return { code: FieldErrorCodes.INVALID_OPTION }
+    case 'custom': {
+      // A refinement may declare its own field code via `params.code`
+      // (e.g. brTaxIdSchema, decision 155); otherwise it is a generic value error.
+      const declared = issue.params?.code
+      return { code: typeof declared === 'string' ? declared : FieldErrorCodes.INVALID_VALUE }
+    }
     default:
       return { code: FieldErrorCodes.INVALID_VALUE }
   }
