@@ -4,9 +4,8 @@ Decisions 54, 168-177 (`AI/docs/decisions/VGR-plano.md`, round 12); plan
 in `AI/docs/plans/plano-chat.md`; spec task 29 / `ChatThread` +
 `MaskedIdentity` in `docs/specs/vgr/003-api-tactical-design.md` (amended
 2026-09-03). A NEW bounded context — `src/modules/messaging/` — on the app
-plane. C2 (mobile) and C3 (panel reading under `chat_evidence`, decision
-175) are separate phases; C3 is NOT built here, but the repository already
-lists threads and messages by report id for it.
+plane. C2 (mobile) is the app's; C3 — the panel reading under
+`chat_evidence` (decision 175) — is the "Panel read (C3)" section below.
 
 Invariants (each has a test):
 
@@ -158,6 +157,80 @@ Env (`.env.example`): `CHAT_MAX_LENGTH=1000`, `CHAT_RATE_PER_MINUTE=30`
   unread }` (null before their first message). Public and summary views
   carry NO chat field.
 
+## Panel read (C3) — `GET /api/reports/:id/chat` (decision 175)
+
+The panel reads a case's chat to moderate retaliation and abuse. It is
+the platform (23/60), so the mask above does not apply to it — the
+grant, the audit row and the anonymity rule of 160 do. Files
+`chat-admin.{service,controller,routes}.ts` in this module; migration
+`044_chat_evidence.sql`; pointer in `report-moderation.md`.
+
+- **Own interface `chat_evidence`** — kind 'R', group "Operations", VIEW
+  only, **NO bootstrap** (`InterfaceKeys.CHAT_EVIDENCE`): nobody reads a
+  conversation until a human grants it — the posture of `media_original`
+  (029) and `report_exact_position` (038). Being able to review a case
+  must not silently include reading the chat.
+- **Stacked guards**: `requirePrivilege(REPORTS, VIEW)` THEN
+  `requirePrivilege(CHAT_EVIDENCE, VIEW)` — either grant alone is a 403,
+  and a refusal leaves no audit row.
+- **Mounted from `gateway/router.ts`** at `/api/reports/:id/chat`
+  (`Router({ mergeParams: true })`, registered before `/reports`) — the
+  route is the messaging module's, the path is the reports module's, and
+  neither module imports the other. Panel plane: behind `authMiddleware`
+  like all of `/api`; 401 without a session.
+- **Every read writes `tb_admin_audit`** (116/166): one row per request,
+  action `read`, entity `report_chat`, entityId = reportId, written by the
+  controller AFTER the service succeeded (404/422 leave no row).
+  `Cache-Control: no-store` — a cached read would be an unaudited read.
+- **READ ONLY** (175): no POST/PUT/DELETE exists on the path (they answer
+  404 and touch nothing); the panel never posts, hides or deletes a
+  message, and the participants' `last_read_message_id` is never touched
+  (the panel is not a participant). Hiding the whole case (162) already
+  closes the channel; per-message moderation reopens with 161.
+- **Identity, per anonymity x role** (23/60/160): the HELPER is always
+  served with `accountId` + `displayName` (they hold an account, 169;
+  their anonymity was a choice shown to the reporter, not to the
+  platform) and `anonymousChoice = offer.anonymous`; the REPORTER only
+  when the report is NOT anonymous — for an anonymous reporter
+  `accountId: null, displayName: null, anonymousChoice: true`, the
+  account is not even looked up, and the internal `reporter_account_id`
+  / `client_key` never appear in the payload. The tier does NOT degrade
+  identity here (60).
+- **Text as stored, timestamps EXACT**: `text` is null after the purge
+  (`purged: true`, 25/131); `createdAt` is not tier-degraded — 174/41
+  protect the reporter from the OTHER SIDE's correlation, and the panel
+  is not the other side.
+- **404** only when the case is missing or soft-deleted; a case with no
+  threads answers `{ threads: [] }` (its existence is already known to a
+  `reports` VIEW holder); a PURGED case still serves its skeleton
+  (threads and rows with `text: null`).
+- **`?limit`** — messages per thread, 1..500, default 200 (422 with the
+  field code of decision 83 otherwise); `hasMore` flags a longer thread.
+  Messages ascending by id from the first one.
+
+```
+200 {
+  reportId, tier: 'low'|'medium'|'high',
+  threads: [{
+    threadId, helpOfferId, createdAt: ISO (exact), closed: boolean,   // closed = resolved or hidden (173)
+    participants: [{ role: 'reporter'|'helper', participantToken: 32 hex,
+                     accountId: number|null, displayName: string|null, anonymousChoice: boolean }],
+    messages: [{ messageId, sender: participantToken, text: string|null, purged: boolean, createdAt: ISO (exact) }],
+    hasMore: boolean
+  }]
+}
+```
+
+Tests: `chat-admin.service.spec` (identity matrix per anonymity x role,
+helper never masked even in high tier, exact timestamps, purged text,
+empty threads, tier, per-thread cap and `hasMore`, closed per case
+state, no write function ever called, serialized payload free of
+`clientKey` / `reporterAccountId`), `chat-admin.routes.spec` (both grants
+required both ways, audit row per read with entity `report_chat`,
+no-store, 422 on `limit`, 404 not audited, POST/PUT/DELETE/PATCH 404, 401
+without token), `chat.repository.spec` (`anonymous` projected by
+`findReportForChat`; `findAccountDisplayName`).
+
 ## Tests
 
 `shared/chat/__tests__/contact-filter.spec` (every kind, the 8-digit
@@ -178,5 +251,8 @@ level).
 
 ## Status
 
-- C1 — API side DONE 2026-09-03 (uncommitted). 88 suites / 832 tests
-  green; `tsc` clean. C2 (mobile) and C3 (panel) await "pode seguir".
+- C1 — API side DONE 2026-09-03 (api `8af91a8`, `b13ed6a`); C2 mobile
+  DONE the same day (app `7c75d4f`).
+- C3 — API side DONE 2026-09-03 (uncommitted): `chat_evidence` (044),
+  `GET /api/reports/:id/chat`. 90 suites / 869 tests green; `tsc` clean.
+  Migration 044 is applied by the orchestrator, not here.

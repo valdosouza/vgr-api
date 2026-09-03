@@ -16,6 +16,7 @@ import caseFreezeRoutes from '@modules/reports/case-freeze.routes'
 import reportsAdminRoutes from '@modules/reports/reports-admin.routes'
 import rewardMediationRoutes from '@modules/reward/reward-mediation.routes'
 import adminAuditRoutes from '@modules/admin-audit/admin-audit.routes'
+import chatAdminRoutes from '@modules/messaging/chat-admin.routes'
 
 /**
  * Central router — every module is mounted here at /api/<module>,
@@ -54,6 +55,14 @@ router.use('/media', mediaAdminRoutes)
 
 // Case freeze (decisions 141/142) — freeze with 1, unfreeze with 2.
 router.use('/case-freeze', caseFreezeRoutes)
+
+// Audited read of a case's chat (C3, decision 175) — the messaging
+// module's route mounted on the reports path from HERE, so neither module
+// imports the other; the `:id` param merges into the sub-router. Mounted
+// BEFORE /reports so the literal `chat` segment is matched by its owner
+// first (reports-admin's `/:id` is an exact match and would not take it
+// anyway, but the order makes the intent explicit).
+router.use('/reports/:id/chat', chatAdminRoutes)
 
 // Report search + case detail on the panel plane (B1, decisions 159/166)
 // — detail reads audited; the exact position needs a second grant.

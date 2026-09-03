@@ -16,6 +16,9 @@ export interface ChatReportRow {
    *  secret (134/137). Internal only — never serialized. */
   clientKey: string
   reporterAccountId: number | null
+  /** The reporter's anonymity choice (decision 160): the panel names an
+   *  identified reporter and NEVER an anonymous one, account or not. */
+  anonymous: boolean
   category: string | null
   status: 'open' | 'resolved'
   hidden: boolean
@@ -140,4 +143,56 @@ export interface PostMessageResult {
   /** True when the clientKey had already been accepted (172/137) — the
    *  controller answers 200 instead of 201. */
   replayed: boolean
+}
+
+/* ------------------------------------------------------------------ *
+ * Panel read — C3 (decision 175). The panel IS the platform (23/60):
+ * the helper is always identifiable, the reporter only when the report
+ * is not anonymous (160). Internal reporter_account_id / client_key of
+ * an anonymous reporter never appear; timestamps are EXACT (the panel is
+ * not a participant — 41 protects reporter-side correlation).
+ * ------------------------------------------------------------------ */
+
+export interface ChatEvidenceQuery {
+  /** Messages per thread, 1..500 (default 200). */
+  limit: number
+}
+
+export interface EvidenceParticipantView {
+  role: ChatRole
+  participantToken: string
+  /** Null for an anonymous reporter (160/23). */
+  accountId: number | null
+  displayName: string | null
+  /** The reporter's report-level choice / the helper's offer choice. */
+  anonymousChoice: boolean
+}
+
+export interface EvidenceMessageView {
+  messageId: number
+  /** The sender's participantToken. */
+  sender: string
+  /** As stored — null when purged (25/131). */
+  text: string | null
+  purged: boolean
+  /** EXACT ISO timestamp (60). */
+  createdAt: string
+}
+
+export interface ThreadEvidenceView {
+  threadId: number
+  helpOfferId: number
+  createdAt: string
+  /** Derived from the case at read time (173): resolved or hidden. */
+  closed: boolean
+  participants: EvidenceParticipantView[]
+  /** Ascending by id, capped at `limit`. */
+  messages: EvidenceMessageView[]
+  hasMore: boolean
+}
+
+export interface ReportChatEvidence {
+  reportId: number
+  tier: RiskTier
+  threads: ThreadEvidenceView[]
 }

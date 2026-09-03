@@ -65,6 +65,10 @@ export const InterfaceKeys = {
    *  tb_admin_audit trail (VIEW only; the table stays append-only and
    *  reading it is not itself audited). */
   ADMIN_AUDIT: 'admin_audit',
+  /** kind 'R' resource (decision 175 — migration 044, NO bootstrap):
+   *  reading a case's masked chat on the panel, stacked on `reports`
+   *  VIEW; every read is audited (entity `report_chat`). */
+  CHAT_EVIDENCE: 'chat_evidence',
 } as const
 
 export type InterfaceKey = (typeof InterfaceKeys)[keyof typeof InterfaceKeys]

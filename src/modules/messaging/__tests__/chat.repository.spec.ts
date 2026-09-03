@@ -210,6 +210,7 @@ describe('chat.repository — SQL contracts (migration 043, decisions 169-177)',
           id: 7,
           clientKey: 'k',
           reporterAccountId: null,
+          anonymous: 'S',
           category: 'assault',
           status: 'open',
           hidden: 'N',
@@ -221,15 +222,33 @@ describe('chat.repository — SQL contracts (migration 043, decisions 169-177)',
     const report = await repository.findReportForChat(7)
     const [sql] = mockedPool.query.mock.calls[0]
     expect(flat(sql)).toContain("WHERE id = ? AND deleted = 'N'")
+    expect(flat(sql)).toContain('anonymous')
     expect(report).toEqual({
       id: 7,
       clientKey: 'k',
       reporterAccountId: null,
+      anonymous: true,
       category: 'assault',
       status: 'open',
       hidden: false,
       frozen: true,
       purged: false,
+    })
+  })
+
+  describe('findAccountDisplayName (C3 panel read, decisions 160/175)', () => {
+    it('reads display_name of one account by id — table access, never a module import', async () => {
+      mockedPool.query.mockResolvedValue([[{ displayName: 'Bia' }]])
+      const name = await repository.findAccountDisplayName(42)
+      const [sql, params] = mockedPool.query.mock.calls[0]
+      expect(flat(sql)).toContain('display_name AS displayName FROM tb_user_account WHERE id = ?')
+      expect(params).toEqual([42])
+      expect(name).toBe('Bia')
+    })
+
+    it('null when the account does not exist', async () => {
+      mockedPool.query.mockResolvedValue([[]])
+      expect(await repository.findAccountDisplayName(42)).toBeNull()
     })
   })
 })

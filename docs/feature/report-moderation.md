@@ -16,6 +16,12 @@ Invariants every phase keeps (tested):
   Helpers in offers follow the same rule.
 - Enforcement per endpoint with `requirePrivilege` (72); screens only
   disable buttons.
+- The case's masked CHAT is read on this same path — `GET
+  /api/reports/:id/chat` — under its own no-bootstrap grant
+  `chat_evidence` stacked on `reports` VIEW, every read audited (decision
+  175, C3 of the chat front). The route belongs to the messaging module
+  and is mounted from `gateway/router.ts`: see "Panel read (C3)" in
+  `chat.md`.
 
 ## B1 — search + detail (decisions 159/160/165/166)
 

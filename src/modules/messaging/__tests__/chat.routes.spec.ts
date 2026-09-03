@@ -62,6 +62,7 @@ function report(overrides: Partial<ChatReportRow> = {}): ChatReportRow {
     id: 7,
     clientKey: REPORT_KEY,
     reporterAccountId: 42,
+    anonymous: false,
     category: 'assault',
     status: 'open',
     hidden: false,

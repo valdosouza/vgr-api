@@ -23,7 +23,7 @@ import {
 export async function findReportForChat(reportId: number): Promise<ChatReportRow | null> {
   const [rows] = await pool.query<any[]>(
     `SELECT id, client_key AS clientKey, reporter_account_id AS reporterAccountId,
-            category, status, hidden, frozen, purged
+            anonymous, category, status, hidden, frozen, purged
      FROM tb_report WHERE id = ? AND deleted = 'N'`,
     [reportId]
   )
@@ -33,12 +33,24 @@ export async function findReportForChat(reportId: number): Promise<ChatReportRow
     id: row.id,
     clientKey: row.clientKey,
     reporterAccountId: row.reporterAccountId ?? null,
+    anonymous: row.anonymous === 'S',
     category: row.category ?? null,
     status: row.status,
     hidden: row.hidden === 'S',
     frozen: row.frozen === 'S',
     purged: row.purged === 'S',
   }
+}
+
+/** The C3 panel read (decision 175) names an IDENTIFIED reporter (160):
+ *  one account's display name, by id. Table access on tb_user_account —
+ *  never an import of the accounts or reports module. */
+export async function findAccountDisplayName(accountId: number): Promise<string | null> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT display_name AS displayName FROM tb_user_account WHERE id = ?`,
+    [accountId]
+  )
+  return rows[0]?.displayName ?? null
 }
 
 /** ONLY identified offers match (helper_account_id = ?) — a helper who

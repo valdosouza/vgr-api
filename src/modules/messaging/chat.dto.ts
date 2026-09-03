@@ -17,3 +17,9 @@ export const chatMessagesQueryDto = z.object({
   after: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 })
+
+/** Panel read (C3, decision 175): cap of messages PER THREAD, 1..500,
+ *  default 200 — the whole case is served in one audited request. */
+export const chatEvidenceQueryDto = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(200),
+})
