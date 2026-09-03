@@ -121,12 +121,12 @@ text. Detection order: e-mail → URL → phone → messenger → handle.
 | `phone` | a run of digits with spaces / dots / dashes / parentheses / leading `+` holding **>= 8 digits**. 7 digits pass — house numbers, times (`15h30`, `15:30`), money (`R$ 1.500,00`), dates, short case ids are all under the bar or broken by a non-separator character |
 | `email` | `local@domain.tld` |
 | `url` | `http(s)://…`, `www.…`, or a bare `domain.tld` with a >= 2-letter TLD (a period followed by a space is a sentence, not a domain) |
-| `messenger` | `whatsapp | whats | instagram | insta | facebook | face | telegram | signal | discord | tiktok | zap` (word-bounded) followed within 40 characters by a digit or an `@handle` |
+| `messenger` | `whatsapp | whats | instagram | insta | facebook | telegram | signal | discord | tiktok | zap` (word-bounded) followed within 40 characters by a digit or an `@handle` |
 | `handle` | `@` + >= 3 chars, not glued to an e-mail |
 
 Known false positives accepted with the rule as decided: a bare
-`word.word` typo without a space reads as a domain; `face` is a listed
-word, so "em face de 3 pessoas" is refused. The app's mirror gives the
+`word.word` typo without a space reads as a domain. `face` was removed from the
+messenger list on 2026-09-03 ("em face de 3 pessoas" was refused) — only `facebook` remains. The app's mirror gives the
 sender the excerpt to rewrite.
 
 ## Storage (migration `043_chat.sql`)

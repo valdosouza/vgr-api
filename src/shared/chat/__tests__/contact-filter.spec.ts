@@ -45,6 +45,7 @@ describe('contact filter (decision 171)', () => {
       ['case id under 8 digits', 'boletim 2026-123'],
       ['distance and age', 'uns 300 metros, criança de 7 anos'],
       ['plain sentence', 'estou perto da praça, posso ir agora'],
+      ['"face" as an ordinary word (removed from the messenger list, 2026-09-03)', 'em face de 3 pessoas'],
       ['empty', ''],
     ])('%s passes', (_label, text) => {
       expect(findContact(text)).toBeNull()
@@ -105,7 +106,6 @@ describe('contact filter (decision 171)', () => {
       ['signal + number', 'signal 4567'],
       ['discord + handle', 'discord @ana'],
       ['tiktok + handle', 'tiktok @ana'],
-      ['face + number', 'face 4567'],
       ['facebook + handle', 'facebook @ana'],
       ['number within 40 chars', 'me procura no telegram que o final e 4567'],
     ])('flags %s', (_label, text) => {

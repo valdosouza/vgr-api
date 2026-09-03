@@ -15,7 +15,7 @@
  *  - URLs: http(s)://, www., or a bare domain.tld (>= 2-letter TLD);
  *  - @handles of >= 3 characters;
  *  - a messenger name (whats, whatsapp, zap, telegram, insta, instagram,
- *    signal, discord, tiktok, face, facebook) followed within 40
+ *    signal, discord, tiktok, facebook) followed within 40
  *    characters by a number or a handle.
  * Matching is case-insensitive with accents stripped first.
  */
@@ -36,7 +36,7 @@ const URL = /(https?:\/\/[^\s]+|www\.[^\s]+|\b[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2
 /** A run of digits and phone separators, starting and ending on a digit. */
 const PHONE_CANDIDATE = /\+?\(?\d[\d\s().+-]*\d/g
 const MESSENGER = new RegExp(
-  `\\b(whatsapp|whats|instagram|insta|facebook|face|telegram|signal|discord|tiktok|zap)\\b` +
+  `\\b(whatsapp|whats|instagram|insta|facebook|telegram|signal|discord|tiktok|zap)\\b` +
     `[\\s\\S]{0,${MESSENGER_WINDOW}}?(\\d|@[a-z0-9_])`
 )
 /** '@' not glued to an e-mail's local part, then >= 3 handle characters. */
