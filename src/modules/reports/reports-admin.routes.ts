@@ -57,11 +57,24 @@ const router = Router()
  *   post:
  *     summary: Reverts the hide under the same single-human rule, reason mandatory (decision 162)
  *     tags: [Reports]
+ * /api/reports/queue:
+ *   get:
+ *     summary: Proactive moderation queue — open, unreviewed, not hidden, not purged; tier > media > age; NOT audited (decisions 161/166)
+ *     tags: [Reports]
+ *     parameters:
+ *       - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
+ *       - { in: query, name: pageSize, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+ * /api/reports/{id}/reviewed:
+ *   post:
+ *     summary: Marks the case reviewed — one human with reports UPDATE, no body, audited; 409 DUPLICATE on a second mark (decisions 161/165)
+ *     tags: [Reports]
  */
 router.get('/', requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW), controller.search)
 // Statistics (B4, 164/165) — its OWN interface, registered BEFORE /:id so
 // the literal segment never parses as an id; not audited.
 router.get('/stats', requirePrivilege(InterfaceKeys.REPORT_STATS, Privileges.VIEW), controller.stats)
+// Queue (B3, 161) — `reports` VIEW, also BEFORE /:id; a list read, not audited (166).
+router.get('/queue', requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW), controller.queue)
 router.get('/:id',requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW), controller.detail)
 router.get(
   '/:id/position',
@@ -75,6 +88,12 @@ router.post(
   '/:id/unhide',
   requirePrivilege(InterfaceKeys.REPORTS, Privileges.UPDATE),
   controller.unhide
+)
+// Mark reviewed (B3, 161) IS `reports` UPDATE too (165); no body, audited.
+router.post(
+  '/:id/reviewed',
+  requirePrivilege(InterfaceKeys.REPORTS, Privileges.UPDATE),
+  controller.reviewed
 )
 
 export default router

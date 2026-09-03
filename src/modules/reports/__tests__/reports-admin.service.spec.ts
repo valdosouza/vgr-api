@@ -33,6 +33,8 @@ function row(overrides: Partial<ReportRow> = {}): ReportRow {
     hiddenNote: null,
     hiddenAt: null,
     hiddenBy: null,
+    reviewedAt: null,
+    reviewedBy: null,
     createdAt: new Date('2026-08-03T12:34:56Z'),
     ...overrides,
   }
@@ -49,6 +51,7 @@ function searchRow(overrides: Partial<ReportSearchRow> = {}): ReportSearchRow {
     frozen: false,
     purged: false,
     hidden: false,
+    reviewed: false,
     lat: -23.551234,
     lng: -46.634567,
     mediaCount: 2,
@@ -160,6 +163,7 @@ describe('reports-admin.service — search (decisions 159/166)', () => {
       frozen: false,
       purged: false,
       hidden: false,
+      reviewed: false,
       mediaCount: 2,
       position: { lat: -23.55, lng: -46.63 }, // high tier grid 0.01
       createdAt: '2026-08-03T12:34:56.000Z',
@@ -359,5 +363,55 @@ describe('reports-admin.service — exact position (decision 159)', () => {
 
     mockedRepository.findById.mockResolvedValue(null)
     await expect(service.getReportExactPosition(8)).rejects.toMatchObject({ statusCode: 404 })
+  })
+})
+
+describe('reports-admin.service — B3 review surfaces on search and detail (decision 161)', () => {
+  const REVIEWED_AT = new Date('2026-09-02T10:00:00Z')
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+    tierTable()
+    mockedRepository.searchReports.mockResolvedValue({ rows: [], total: 0 })
+    mockedRepository.getTimeline.mockResolvedValue([])
+    mockedRepository.findOffersForPanel.mockResolvedValue([])
+    mockedRepository.findAttachedMediaWithStatus.mockResolvedValue([])
+  })
+
+  it('search passes the reviewed filter through to the repository', async () => {
+    await service.searchReports({ page: 1, pageSize: 20, reviewed: false })
+    expect(mockedRepository.searchReports).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewed: false }),
+      1,
+      20
+    )
+  })
+
+  it('list items carry the reviewed mark', async () => {
+    mockedRepository.searchReports.mockResolvedValue({
+      rows: [searchRow({ reviewed: true }), searchRow({ id: 8 })],
+      total: 2,
+    })
+    const page = await service.searchReports({ page: 1, pageSize: 20 })
+    expect(page.items[0].reviewed).toBe(true)
+    expect(page.items[1].reviewed).toBe(false)
+  })
+
+  it('detail exposes reviewedAt (ISO) and reviewedBy — also on the purged skeleton (tb_report columns)', async () => {
+    mockedRepository.findById.mockResolvedValue(row({ reviewedAt: REVIEWED_AT, reviewedBy: 3 }))
+    const detail = await service.getReportPanelDetail(7)
+    expect(detail).toMatchObject({ reviewedAt: REVIEWED_AT.toISOString(), reviewedBy: 3 })
+
+    mockedRepository.findById.mockResolvedValue(
+      row({ purged: true, lat: null, lng: null, reviewedAt: REVIEWED_AT, reviewedBy: 3 })
+    )
+    const skeleton = await service.getReportPanelDetail(7)
+    expect(skeleton).toMatchObject({ purged: true, reviewedAt: REVIEWED_AT.toISOString(), reviewedBy: 3 })
+  })
+
+  it('detail of an unreviewed case carries null review fields', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    const detail = await service.getReportPanelDetail(7)
+    expect(detail).toMatchObject({ reviewedAt: null, reviewedBy: null })
   })
 })

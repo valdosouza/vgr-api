@@ -1,6 +1,7 @@
 import pool from '@shared/db/connection'
 import {
   Category,
+  QueueTierSets,
   ReportRow,
   ReportSearchFilters,
   ReportSearchRow,
@@ -8,6 +9,7 @@ import {
   Subject,
 } from '@modules/reports/reports.interface'
 import { ModerationReason } from '@shared/moderation/moderation-reason'
+import { RiskTier } from '@shared/risk/risk-tier'
 
 const REPORT_SELECT = `
   SELECT id, client_key AS clientKey, category, free_tag AS freeTag, subject,
@@ -17,6 +19,7 @@ const REPORT_SELECT = `
          frozen_reason AS frozenReason, frozen_at AS frozenAt, purged,
          hidden, hidden_reason_code AS hiddenReasonCode, hidden_note AS hiddenNote,
          hidden_at AS hiddenAt, hidden_by AS hiddenBy,
+         reviewed_at AS reviewedAt, reviewed_by AS reviewedBy,
          created_at AS createdAt
   FROM tb_report`
 
@@ -49,6 +52,8 @@ function toReport(row: any): ReportRow {
     hiddenNote: row.hiddenNote ?? null,
     hiddenAt: row.hiddenAt ?? null,
     hiddenBy: row.hiddenBy ?? null,
+    reviewedAt: row.reviewedAt ?? null,
+    reviewedBy: row.reviewedBy ?? null,
     createdAt: row.createdAt,
   }
 }
@@ -546,6 +551,10 @@ export async function searchReports(
     where.push('r.hidden = ?')
     params.push(filters.hidden ? 'S' : 'N')
   }
+  if (filters.reviewed !== undefined) {
+    // Review mark (B3, 161) is the timestamp itself — no flag column.
+    where.push(filters.reviewed ? 'r.reviewed_at IS NOT NULL' : 'r.reviewed_at IS NULL')
+  }
   if (filters.hasMedia !== undefined) {
     where.push(
       `${filters.hasMedia ? '' : 'NOT '}EXISTS (
@@ -572,37 +581,118 @@ export async function searchReports(
   if (total === 0) return { rows: [], total }
 
   const [rows] = await pool.query<any[]>(
-    `SELECT r.id, r.category, r.free_tag AS freeTag, r.subject, r.anonymous, r.status,
-            r.frozen, r.purged, r.hidden, r.lat, r.lng, r.created_at AS createdAt,
-            r.resolved_at AS resolvedAt,
-            (SELECT COUNT(*) FROM tb_report_media rm
-             JOIN tb_media m ON m.id = rm.tb_media_id AND m.deleted = 'N'
-             WHERE rm.tb_report_id = r.id AND rm.deleted = 'N') AS mediaCount
-     FROM tb_report r
+    `${PANEL_LIST_SELECT}
      WHERE ${whereSql}
      ORDER BY r.created_at DESC, r.id DESC
      LIMIT ? OFFSET ?`,
     [...params, pageSize, (page - 1) * pageSize]
   )
+  return { rows: rows.map(toSearchRow), total }
+}
+
+/** Living attached media, any status — B1's hasMedia definition. */
+const LIVING_MEDIA_EXISTS = `EXISTS (
+         SELECT 1 FROM tb_report_media rm
+         JOIN tb_media m ON m.id = rm.tb_media_id AND m.deleted = 'N'
+         WHERE rm.tb_report_id = r.id AND rm.deleted = 'N')`
+
+/** The list projection shared by the search and the queue: NO client_key,
+ *  NO reporter_account_id (160). */
+const PANEL_LIST_SELECT = `
+  SELECT r.id, r.category, r.free_tag AS freeTag, r.subject, r.anonymous, r.status,
+         r.frozen, r.purged, r.hidden, r.reviewed_at AS reviewedAt, r.lat, r.lng,
+         r.created_at AS createdAt, r.resolved_at AS resolvedAt,
+         (SELECT COUNT(*) FROM tb_report_media rm
+          JOIN tb_media m ON m.id = rm.tb_media_id AND m.deleted = 'N'
+          WHERE rm.tb_report_id = r.id AND rm.deleted = 'N') AS mediaCount
+  FROM tb_report r`
+
+function toSearchRow(row: any): ReportSearchRow {
   return {
-    rows: rows.map((row) => ({
-      id: row.id,
-      category: (row.category as Category) ?? null,
-      freeTag: row.freeTag ?? null,
-      subject: row.subject as Subject,
-      anonymous: row.anonymous === 'S',
-      status: row.status as ReportStatus,
-      frozen: row.frozen === 'S',
-      purged: row.purged === 'S',
-      hidden: row.hidden === 'S',
-      lat: row.lat === null ? null : Number(row.lat),
-      lng: row.lng === null ? null : Number(row.lng),
-      mediaCount: Number(row.mediaCount ?? 0),
-      createdAt: row.createdAt,
-      resolvedAt: row.resolvedAt ?? null,
-    })),
-    total,
+    id: row.id,
+    category: (row.category as Category) ?? null,
+    freeTag: row.freeTag ?? null,
+    subject: row.subject as Subject,
+    anonymous: row.anonymous === 'S',
+    status: row.status as ReportStatus,
+    frozen: row.frozen === 'S',
+    purged: row.purged === 'S',
+    hidden: row.hidden === 'S',
+    reviewed: row.reviewedAt != null,
+    lat: row.lat === null ? null : Number(row.lat),
+    lng: row.lng === null ? null : Number(row.lng),
+    mediaCount: Number(row.mediaCount ?? 0),
+    createdAt: row.createdAt,
+    resolvedAt: row.resolvedAt ?? null,
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Proactive moderation queue — B3 of plano-moderacao-painel.md
+ * (decision 161).
+ * ------------------------------------------------------------------ */
+
+const TIER_RANK: Record<RiskTier, number> = { high: 0, medium: 1, low: 2 }
+
+/**
+ * The queue: open, NOT reviewed, NOT hidden (a hidden case was already
+ * moderated), NOT purged, living. Frozen cases STAY in (161). Ordered by
+ * tier (a CASE over the category sets the service resolved from
+ * shared/risk — free-tag rows rank by their own tier), then cases WITH
+ * media first, then oldest first with id as the tiebreaker. Same
+ * projection as the search: no identity (160).
+ */
+export async function queueReports(
+  tiers: QueueTierSets,
+  page: number,
+  pageSize: number
+): Promise<{ rows: ReportSearchRow[]; total: number }> {
+  const whereSql = `r.deleted = 'N' AND r.status = 'open' AND r.reviewed_at IS NULL
+       AND r.hidden = 'N' AND r.purged = 'N'`
+
+  const [countRows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_report r WHERE ${whereSql}`
+  )
+  const total = Number(countRows[0]?.total ?? 0)
+  if (total === 0) return { rows: [], total }
+
+  // Decision 161: when the user "flag content" signal exists, it enters
+  // THIS queue ABOVE the tier priority — it becomes the first ORDER BY key,
+  // before the CASE below. Not built here (no such signal yet).
+  const whens: string[] = ['WHEN r.category IS NULL THEN ?']
+  const params: unknown[] = [TIER_RANK[tiers.freeTagTier]]
+  for (const tier of ['high', 'medium', 'low'] as RiskTier[]) {
+    const categories = tiers.tierCategories[tier]
+    if (categories.length === 0) continue
+    whens.push(`WHEN r.category IN (${categories.map(() => '?').join(', ')}) THEN ${TIER_RANK[tier]}`)
+    params.push(...categories)
+  }
+
+  const [rows] = await pool.query<any[]>(
+    `${PANEL_LIST_SELECT}
+     WHERE ${whereSql}
+     ORDER BY CASE ${whens.join(' ')} ELSE ${TIER_RANK.low} END ASC,
+              ${LIVING_MEDIA_EXISTS} DESC,
+              r.created_at ASC, r.id ASC
+     LIMIT ? OFFSET ?`,
+    [...params, pageSize, (page - 1) * pageSize]
+  )
+  return { rows: rows.map(toSearchRow), total }
+}
+
+/**
+ * Mark reviewed (161/165): atomic reviewed_at IS NULL -> NOW() — 0 rows =
+ * already reviewed (or gone). ONLY the two reviewed_* columns move: it is
+ * not a moderation act (hidden), not a lifecycle act (status/frozen),
+ * not retention (expires_at), and no timeline event is written.
+ */
+export async function markReviewed(id: number, actorId: number): Promise<boolean> {
+  const [result] = await pool.query<any>(
+    `UPDATE tb_report SET reviewed_at = NOW(), reviewed_by = ?
+     WHERE id = ? AND reviewed_at IS NULL AND deleted = 'N'`,
+    [actorId, id]
+  )
+  return result.affectedRows > 0
 }
 
 /** Attached media for the PANEL detail: every living tb_media row with

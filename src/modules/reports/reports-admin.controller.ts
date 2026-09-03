@@ -1,7 +1,12 @@
 import { Request, Response } from 'express'
 import * as service from '@modules/reports/reports-admin.service'
 import * as statsService from '@modules/reports/reports-stats.service'
-import { reportSearchQueryDto, reportStatsQueryDto } from '@modules/reports/reports-admin.dto'
+import * as queueService from '@modules/reports/reports-queue.service'
+import {
+  reportQueueQueryDto,
+  reportSearchQueryDto,
+  reportStatsQueryDto,
+} from '@modules/reports/reports-admin.dto'
 import { handleError, parseBody, parseId, zodToFields } from '@shared/http/controller-utils'
 import { auditFromRequest } from '@shared/audit/admin-audit'
 import { ErrorCodes } from '@shared/errors/error-codes'
@@ -51,6 +56,46 @@ export async function stats(req: Request, res: Response): Promise<void> {
     res.json(await statsService.getReportStats(parsed.data))
   } catch (err) {
     handleError(res, err, 'reports-admin.stats')
+  }
+}
+
+/**
+ * Proactive moderation queue (B3 — decision 161). A list read, so NOT
+ * audited (166): opening a case from the queue goes through `detail`,
+ * which is.
+ */
+export async function queue(req: Request, res: Response): Promise<void> {
+  try {
+    const parsed = reportQueueQueryDto.safeParse(req.query)
+    if (!parsed.success) {
+      res.status(422).json({
+        error: 'Validation failed',
+        code: ErrorCodes.VALIDATION_FAILED,
+        fields: zodToFields(parsed.error),
+      })
+      return
+    }
+    res.json(await queueService.getModerationQueue(parsed.data))
+  } catch (err) {
+    handleError(res, err, 'reports-admin.queue')
+  }
+}
+
+/**
+ * Mark reviewed (B3 — decisions 161/165): one human with `reports`
+ * UPDATE; no body (not a moderation act, so no reason); audited (116) as
+ * state_change / report / { action: 'reviewed' } after the service
+ * succeeded — a 404/409 leaves no row.
+ */
+export async function reviewed(req: Request, res: Response): Promise<void> {
+  try {
+    const id = parseId(req, res)
+    if (id === null) return
+    const result = await queueService.markReviewed(id, req.user!.userId)
+    auditFromRequest(req, 'state_change', 'report', id, { action: 'reviewed' })
+    res.json(result)
+  } catch (err) {
+    handleError(res, err, 'reports-admin.reviewed')
   }
 }
 

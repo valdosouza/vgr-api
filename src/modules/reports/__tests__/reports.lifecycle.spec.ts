@@ -46,6 +46,8 @@ function row(overrides: Partial<ReportRow> = {}): ReportRow {
     hiddenNote: null,
     hiddenAt: null,
     hiddenBy: null,
+    reviewedAt: null,
+    reviewedBy: null,
     createdAt: new Date('2026-08-03T14:37:42Z'),
     ...overrides,
   }

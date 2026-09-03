@@ -35,6 +35,10 @@ export interface ReportRow {
   hiddenNote: string | null
   hiddenAt: Date | null
   hiddenBy: number | null
+  /** Review mark (B3, decision 161) — "eyes were on it"; not a moderation
+   *  act, orthogonal to hidden/frozen/retention. */
+  reviewedAt: Date | null
+  reviewedBy: number | null
   createdAt: Date
 }
 
@@ -181,6 +185,8 @@ export interface ReportSearchFilters {
   frozen?: boolean
   hasMedia?: boolean
   hidden?: boolean
+  /** reviewed_at IS NOT NULL / IS NULL (B3, decision 161). */
+  reviewed?: boolean
   createdFrom?: Date
   createdTo?: Date
   /** True when `to` was date-only: bound = next midnight, compared with `<`. */
@@ -199,6 +205,7 @@ export interface ReportSearchRow {
   frozen: boolean
   purged: boolean
   hidden: boolean
+  reviewed: boolean
   lat: number | null
   lng: number | null
   mediaCount: number
@@ -218,6 +225,8 @@ export interface ReportListItem {
   purged: boolean
   /** Moderation mark (B2, decision 162). */
   hidden: boolean
+  /** Review mark (B3, decision 161). */
+  reviewed: boolean
   mediaCount: number
   /** DEGRADED grid (decision 135); null when purged. */
   position: { lat: number; lng: number } | null
@@ -227,6 +236,34 @@ export interface ReportListItem {
 
 export interface ReportPage {
   items: ReportListItem[]
+  page: number
+  pageSize: number
+  total: number
+}
+
+/* ------------------------------------------------------------------ *
+ * Proactive moderation queue — B3 of plano-moderacao-painel.md
+ * (decision 161). The service resolves the tier -> category sets from
+ * shared/risk; the repository only ranks column sets.
+ * ------------------------------------------------------------------ */
+
+export interface QueueTierSets {
+  /** Every category, partitioned by the tier it currently sits in. */
+  tierCategories: Record<RiskTier, string[]>
+  /** Rank of free-tag rows (category IS NULL) = getRiskTier(null). */
+  freeTagTier: RiskTier
+}
+
+/** The B1 list item (degraded position, no identity) plus queue fields. */
+export type QueueItem = ReportListItem & {
+  priority: RiskTier
+  hasMedia: boolean
+  /** Whole hours since created_at at serving time. */
+  ageHours: number
+}
+
+export interface QueuePage {
+  items: QueueItem[]
   page: number
   pageSize: number
   total: number
@@ -278,6 +315,9 @@ export interface ReportPanelDetail {
   hiddenNote: string | null
   hiddenAt: string | null
   hiddenBy: number | null
+  /** Review mark (B3, decision 161); also on the purged skeleton. */
+  reviewedAt: string | null
+  reviewedBy: number | null
   createdAt: string
   resolvedAt: string | null
   expiresAt: string | null

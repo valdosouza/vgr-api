@@ -7,6 +7,7 @@ import {
   ReportPanelDetail,
   ReportRow,
   ReportSearchFilters,
+  ReportSearchRow,
 } from '@modules/reports/reports.interface'
 import { isDateOnly, ReportSearchQuery } from '@modules/reports/reports-admin.dto'
 import { CATEGORIES } from '@shared/taxonomy/taxonomy'
@@ -82,6 +83,7 @@ export async function searchReports(query: ReportSearchQuery): Promise<ReportPag
     frozen: query.frozen,
     hasMedia: query.hasMedia,
     hidden: query.hidden,
+    reviewed: query.reviewed,
     ...(query.tier === undefined ? {} : await resolveTier(query.tier)),
     ...dateBounds(query),
   }
@@ -89,30 +91,36 @@ export async function searchReports(query: ReportSearchQuery): Promise<ReportPag
   const { rows, total } = await repository.searchReports(filters, query.page, query.pageSize)
   const items: ReportListItem[] = []
   for (const row of rows) {
-    const tier = await getRiskTier(row.category)
-    items.push({
-      reportId: row.id,
-      category: row.category,
-      freeTag: row.freeTag,
-      subject: row.subject,
-      tier,
-      status: row.status,
-      anonymous: row.anonymous,
-      frozen: row.frozen,
-      purged: row.purged,
-      hidden: row.hidden,
-      mediaCount: row.mediaCount,
-      // The same grid as the feed (135) — or the sharper surface betrays
-      // the position; purged rows have no position at all (25/131).
-      position:
-        row.purged || row.lat === null || row.lng === null
-          ? null
-          : degradePosition({ lat: row.lat, lng: row.lng }, tier),
-      createdAt: row.createdAt.toISOString(),
-      resolvedAt: row.resolvedAt ? row.resolvedAt.toISOString() : null,
-    })
+    items.push(toReportListItem(row, await getRiskTier(row.category)))
   }
   return { items, page: query.page, pageSize: query.pageSize, total }
+}
+
+/** The ONE mapping from a list row to what the panel sees — shared with
+ *  the B3 queue so every list surface degrades the same way (135/160). */
+export function toReportListItem(row: ReportSearchRow, tier: RiskTier): ReportListItem {
+  return {
+    reportId: row.id,
+    category: row.category,
+    freeTag: row.freeTag,
+    subject: row.subject,
+    tier,
+    status: row.status,
+    anonymous: row.anonymous,
+    frozen: row.frozen,
+    purged: row.purged,
+    hidden: row.hidden,
+    reviewed: row.reviewed,
+    mediaCount: row.mediaCount,
+    // The same grid as the feed (135) — or the sharper surface betrays
+    // the position; purged rows have no position at all (25/131).
+    position:
+      row.purged || row.lat === null || row.lng === null
+        ? null
+        : degradePosition({ lat: row.lat, lng: row.lng }, tier),
+    createdAt: row.createdAt.toISOString(),
+    resolvedAt: row.resolvedAt ? row.resolvedAt.toISOString() : null,
+  }
 }
 
 /** Decision 160: identified -> opaque id + display name; anonymous ->
@@ -145,6 +153,8 @@ export async function getReportPanelDetail(reportId: number): Promise<ReportPane
     hiddenNote: report.hiddenNote,
     hiddenAt: report.hiddenAt ? report.hiddenAt.toISOString() : null,
     hiddenBy: report.hiddenBy,
+    reviewedAt: report.reviewedAt ? report.reviewedAt.toISOString() : null,
+    reviewedBy: report.reviewedBy,
     createdAt: report.createdAt.toISOString(),
     resolvedAt: report.resolvedAt ? report.resolvedAt.toISOString() : null,
     expiresAt: report.expiresAt ? report.expiresAt.toISOString() : null,

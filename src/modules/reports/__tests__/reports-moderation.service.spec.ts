@@ -37,6 +37,8 @@ function row(overrides: Partial<ReportRow> = {}): ReportRow {
     hiddenNote: null,
     hiddenAt: null,
     hiddenBy: null,
+    reviewedAt: null,
+    reviewedBy: null,
     createdAt: new Date('2026-08-03T12:34:56Z'),
     ...overrides,
   }
@@ -64,6 +66,7 @@ function searchRow(overrides: Partial<ReportSearchRow> = {}): ReportSearchRow {
     frozen: false,
     purged: false,
     hidden: false,
+    reviewed: false,
     lat: -23.551234,
     lng: -46.634567,
     mediaCount: 0,

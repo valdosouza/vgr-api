@@ -30,11 +30,22 @@ export const reportSearchQueryDto = z.object({
   hasMedia: queryBool.optional(),
   /** Moderation mark (B2, decision 162). */
   hidden: queryBool.optional(),
+  /** Review mark (B3, decision 161). */
+  reviewed: queryBool.optional(),
   from: queryDate.optional(),
   to: queryDate.optional(),
 })
 
 export type ReportSearchQuery = z.infer<typeof reportSearchQueryDto>
+
+/** Proactive queue query (B3 — decision 161): pagination only; the
+ *  WHERE and the ORDER BY are fixed by the decision, not by the caller. */
+export const reportQueueQueryDto = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+})
+
+export type ReportQueueQuery = z.infer<typeof reportQueueQueryDto>
 
 /**
  * Statistics query (B4 — decision 164). Same date rules as the search;

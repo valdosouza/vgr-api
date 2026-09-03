@@ -339,10 +339,133 @@ per grouping, moderation joins never select note/actor/publicId),
 service 422 pass-through, NOT audited, `/stats` not swallowed by `/:id`,
 401).
 
+## B3 — queue (decisions 161/165/166)
+
+A **proactive** moderation queue: there is no user "flag content" signal
+yet (161 — a future mobile front, behind the Legal Gate). The queue is
+therefore every case that is `open`, NOT yet reviewed, NOT hidden (a
+hidden case was already moderated), NOT purged, `deleted='N'`. **Frozen
+cases stay in the queue.** "Reviewing" is ONE human holding `reports`
+UPDATE (165 — no new interface; the grant declared in 038 already reads
+"moderate / mark reviewed") stamping `reviewed_at` / `reviewed_by`. It is
+audited (116) but needs **no reason** — it is not a moderation act, it
+says "eyes were on it". Un-review does not exist in this phase. Files
+`reports-queue.service.ts`, the `queue` / `reviewed` controller actions
+and routes in `reports-admin.*`, `queueReports` / `markReviewed` in
+`reports.repository.ts`, migration `041_report_review.sql`.
+
+Invariants (each has a test):
+
+- **Reviewing touches nothing else**: the `markReviewed` UPDATE moves
+  ONLY `reviewed_at` / `reviewed_by` — never `hidden`, `frozen`,
+  `status`, `expires_at`, no timeline event (`reports-queue.repository.spec`
+  asserts the SQL; `reports-queue.service.spec` asserts no other
+  repository write runs).
+- **Hiding a queued case removes it from the queue**: the queue WHERE
+  keys on the same `hidden` column the hide UPDATE flips.
+- **Queue reads are list reads → NOT audited** (166). Opening a case from
+  the queue goes through the B1 detail, which is.
+- Everything the queue serves is the B1 `ReportListItem` (degraded
+  position, no identity — 135/160): the mapping is ONE exported function
+  (`toReportListItem` in `reports-admin.service`) shared by search and
+  queue, so no list surface can degrade differently.
+
+### Columns (041)
+
+`tb_report`: `reviewed_at DATETIME NULL`, `reviewed_by INT NULL` (FK
+`tb_user`), `KEY idx_report_review (status, reviewed_at)` — the queue's
+WHERE. Own columns orthogonal to status / frozen / hidden / retention,
+same posture as 039.
+
+### Priority order (161)
+
+Resolved in code, ranked in SQL. The service partitions every category
+of the taxonomy into the tier it currently sits in (`shared/risk`
+`getRiskTier`, as B1 does for its tier filter) and passes the three
+sets plus `getRiskTier(null)` for free-tag rows; the repository orders by
+a `CASE` over those sets:
+
+```
+ORDER BY CASE WHEN r.category IS NULL THEN <freeTagRank>
+              WHEN r.category IN (<high...>)   THEN 0
+              WHEN r.category IN (<medium...>) THEN 1
+              WHEN r.category IN (<low...>)    THEN 2
+              ELSE 2 END ASC,
+         EXISTS(<living attached media, any status>) DESC,   -- B1's hasMedia
+         r.created_at ASC, r.id ASC
+```
+
+An empty tier set drops its `WHEN` (never `IN ()`). When the future
+"flag content" signal exists (161) it enters this SAME queue **above**
+the tier priority — a comment at the ORDER BY marks the spot; it is not
+built.
+
+### `GET /api/reports/queue` — `reports` VIEW, NOT audited (166)
+
+Registered BEFORE `/:id` (like `/stats`) so the literal segment never
+parses as an id (`reports-queue.routes.spec` proves the detail handler
+never runs). Query: `page` (>= 1, default 1), `pageSize` (1..100,
+default 20); 422 with field codes on bad input (decision 83). The WHERE
+and the ORDER BY are fixed by the decision, not by the caller.
+
+```
+200 { items: QueueItem[], page, pageSize, total }
+QueueItem = ReportListItem & {
+  priority: 'high'|'medium'|'low',   // the case's tier today (a flag signal would rank above it, 161)
+  hasMedia: boolean,                 // mediaCount > 0
+  ageHours: number                   // whole hours since created_at at serving time (clock skew -> 0, never negative)
+}
+```
+
+### `POST /api/reports/:id/reviewed` — `reports` UPDATE, audited `state_change` / `report` / id / `{ action: 'reviewed' }`
+
+No body (a stray body is ignored, never validated). 404 `NOT_FOUND` when
+missing / soft-deleted / purged; **409 `DUPLICATE` when `reviewed_at` is
+already set** (reviewing is idempotent-hostile — a second mark is a
+signal that two operators collided), also when the atomic
+`WHERE reviewed_at IS NULL` UPDATE hits 0 rows. Sets `reviewed_at =
+NOW()`, `reviewed_by = req.user.userId`. Returns the B1
+`ReportPanelDetail`, refreshed. No audit row on any refusal (401/403/
+404/409). A hidden case can still be marked reviewed — the two marks are
+independent.
+
+### Surfaces that change
+
+- `ReportListItem` gains `reviewed: boolean` (`reviewed_at IS NOT NULL`);
+  search filter `reviewed=true|false` (`INVALID_OPTION` on any other
+  value).
+- `ReportPanelDetail` gains `reviewedAt: ISO|null`, `reviewedBy:
+  number|null` (also on the purged skeleton — `tb_report` columns).
+- `ReportRow` / `findById` project `reviewed_at` / `reviewed_by`;
+  `ReportSearchRow` gains `reviewed`.
+- **Untouched**: hide/unhide, freeze/unfreeze, stats, purge, the
+  media-expiry job.
+
+### Tests (B3)
+
+`reports-queue.service.spec` (tier -> category sets incl. the free-tag
+tier and pagination passed to the repository, the B1 shape plus
+priority/hasMedia/ageHours, degraded position and no identity in the
+serialized page, free-tag priority, `ageHours` whole hours / never
+negative, frozen stays in, the service never re-filters/re-orders, mark
+reviewed -> refreshed detail, no other write runs, 409 on a second mark
+and on a lost race, 404 missing/purged, hidden case still reviewable),
+`reports-queue.routes.spec` (VIEW vs UPDATE grant per route, defaults,
+422 field codes, NOT audited on GET, audited on POST with the exact
+summary, body ignored on POST, `/queue` not swallowed by `/:id`, 404/409
+pass-through not audited, 400 on a bad id, 401, the `reviewed` search
+filter), `reports-queue.repository.spec` (WHERE exclusions with frozen
+kept in, the ORDER BY CASE / EXISTS / ASC contract and its parameters,
+empty tier set, count-0 short-circuit, hide and queue agree on `hidden`,
+`markReviewed` SQL touches only its two columns, 0 rows -> false,
+`findById` / `searchReports` review projection and filter),
+`reports-admin.service.spec` (reviewed filter pass-through, list mark,
+detail `reviewedAt`/`reviewedBy` incl. the purged skeleton).
+
 ### Status
 
 - B1 — API side DONE 2026-09-02. 64 suites / 478 tests green; `tsc` clean.
 - B2 — API side DONE 2026-09-02. 72 suites / 563 tests green; `tsc` clean.
 - B4 — API side DONE 2026-09-02. 76 suites / 604 tests green; `tsc` clean.
-- B3 (queue), B5 (audit trail screen) — pending, each behind its own
-  "pode seguir" (38).
+- B3 — API side DONE 2026-09-02 (uncommitted). 79 suites / 643 tests green; `tsc` clean.
+- B5 (audit trail screen) — pending, behind its own "pode seguir" (38).
