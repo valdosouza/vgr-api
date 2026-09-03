@@ -110,6 +110,27 @@ export function mediationContestWindowDays(): number {
   return Number(process.env.MEDIATION_CONTEST_WINDOW_DAYS ?? 7)
 }
 
+/**
+ * Masked chat limits (decision 177): the MVP numbers are configuration,
+ * not decisions — 30 messages per minute per thread per participant and
+ * 1000 characters per message by default. The rate window is counted in
+ * the database (no in-memory state), so every instance enforces the same
+ * number.
+ */
+export interface ChatConfig {
+  maxLength: number
+  ratePerMinute: number
+}
+
+export function chatConfig(): ChatConfig {
+  const maxLength = Number(process.env.CHAT_MAX_LENGTH ?? 1000)
+  const ratePerMinute = Number(process.env.CHAT_RATE_PER_MINUTE ?? 30)
+  return {
+    maxLength: Number.isFinite(maxLength) && maxLength > 0 ? maxLength : 1000,
+    ratePerMinute: Number.isFinite(ratePerMinute) && ratePerMinute > 0 ? ratePerMinute : 30,
+  }
+}
+
 /** Boot-time validation — called by server.ts before listening. */
 export function assertRequiredEnv(): void {
   if (process.env.NODE_ENV !== 'production') return

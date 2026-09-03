@@ -34,6 +34,10 @@ export const Capabilities = {
   DATA_CROSS_BORDER: 'data.cross_border',
   /** Panic-button dispatch to responders (decisions 51-52, 62-63). */
   PANIC_DISPATCH: 'panic.dispatch',
+  /** Masked reporter <-> helper chat (decisions 54, 176): text between
+   *  anonymous parties carries jurisdiction-dependent legal risk, like
+   *  media (138). Born WIRED in C1 (messaging/chat.service.ts). */
+  CHAT_MASKED: 'chat.masked',
 } as const
 
 export type Capability = (typeof Capabilities)[keyof typeof Capabilities]
@@ -66,6 +70,9 @@ export const PENDING_WIRING: ReadonlySet<Capability> = new Set<Capability>([
   // (reserveGuarantee).
   // reward.mediation: WIRED in the same delivery (today asserted by the
   // propose/approve/execute cycle of decisions 148/149).
+  // chat.masked: born WIRED in C1 (messaging/chat.service.ts, decision
+  // 176 — asserted before thread creation and before every post), so it
+  // never entered this set.
   Capabilities.REWARD_INTERMEDIATION_OWN,
   Capabilities.MINOR_DATA_RETENTION,
   Capabilities.IDENTITY_DISCLOSURE,

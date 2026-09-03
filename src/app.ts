@@ -16,6 +16,7 @@ import reportRoutes from '@modules/reports/reports.routes'
 import feedRoutes from '@modules/help-matching/help-matching.routes'
 import helpOfferRoutes from '@modules/help-offers/help-offers.routes'
 import rewardRoutes from '@modules/reward/reward.routes'
+import chatRoutes from '@modules/messaging/chat.routes'
 import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -120,6 +121,12 @@ app.use('/app-help-offers', rateLimitMiddleware, helpOfferRoutes)
 // guarantee only. Identified account required (appAuthMiddleware, not
 // optional): a monetary reward needs a payer the PSP can bill.
 app.use('/app-reward', rateLimitMiddleware, appAuthMiddleware, rewardRoutes)
+
+// Masked chat (decisions 54/169-177) — app plane like /app-reports: the
+// anonymous reporter joins by x-client-key, the helper by account
+// (optionalAppAuth per route, as reports do); the per-participant message
+// rate (177) is enforced in the service, on top of this per-IP limit.
+app.use('/app-chat', rateLimitMiddleware, chatRoutes)
 
 // JWT auth on all /api routes (public routes, e.g. listing anonymous
 // reports, go BEFORE this line once they exist — scope-refinement will

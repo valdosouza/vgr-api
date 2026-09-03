@@ -298,14 +298,83 @@ export async function findExpiredReports(limit: number): Promise<number[]> {
  * remain, their payloads (edit diffs, etc.) do not.
  */
 export async function purgeReport(id: number): Promise<void> {
-  await pool.query(
-    `UPDATE tb_report
-     SET detail_fields = NULL, lat = NULL, lng = NULL,
-         free_tag = IF(free_tag IS NULL, NULL, '[purged]'), purged = 'S'
-     WHERE id = ?`,
-    [id]
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    await conn.query(
+      `UPDATE tb_report
+       SET detail_fields = NULL, lat = NULL, lng = NULL,
+           free_tag = IF(free_tag IS NULL, NULL, '[purged]'), purged = 'S'
+       WHERE id = ?`,
+      [id]
+    )
+    await conn.query(`UPDATE tb_report_timeline SET payload = NULL WHERE tb_report_id = ?`, [id])
+    // The chat follows the case's retention (decision 173): text nulled,
+    // rows / counts / timestamps kept — same skeleton rule as the report.
+    // SQL over tb_chat_message is table access, not a module import.
+    await conn.query(
+      `UPDATE tb_chat_message m
+       JOIN tb_chat_thread t ON t.id = m.tb_chat_thread_id
+       SET m.text = NULL, m.purged = 'S'
+       WHERE t.tb_report_id = ?`,
+      [id]
+    )
+    await conn.commit()
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Chat entry point on the detail view (C1 — decision 172). Counts only:
+ * the messages themselves are the messaging module's.
+ * ------------------------------------------------------------------ */
+
+/** Owner side: how many threads the case has, and how many messages from
+ *  helpers sit past the REPORTER's own read pointer across all of them. */
+export async function getOwnerChatSummary(
+  reportId: number
+): Promise<{ threads: number; unread: number }> {
+  const [threadRows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_chat_thread WHERE tb_report_id = ? AND deleted = 'N'`,
+    [reportId]
   )
-  await pool.query(`UPDATE tb_report_timeline SET payload = NULL WHERE tb_report_id = ?`, [id])
+  const [unreadRows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total
+     FROM tb_chat_message m
+     JOIN tb_chat_thread t ON t.id = m.tb_chat_thread_id AND t.deleted = 'N'
+     JOIN tb_chat_participant p ON p.tb_chat_thread_id = t.id AND p.role = 'reporter'
+     WHERE t.tb_report_id = ? AND m.sender_participant_id <> p.id
+       AND (p.last_read_message_id IS NULL OR m.id > p.last_read_message_id)`,
+    [reportId]
+  )
+  return {
+    threads: Number(threadRows[0]?.total ?? 0),
+    unread: Number(unreadRows[0]?.total ?? 0),
+  }
+}
+
+/** Helper side: their own thread on the case (null before the first
+ *  message, 173) and the reporter's messages past THEIR read pointer. */
+export async function getHelperChatSummary(
+  reportId: number,
+  helperAccountId: number
+): Promise<{ threadId: number; unread: number } | null> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT t.id AS threadId,
+            (SELECT COUNT(*) FROM tb_chat_message m
+             WHERE m.tb_chat_thread_id = t.id AND m.sender_participant_id <> p.id
+               AND (p.last_read_message_id IS NULL OR m.id > p.last_read_message_id)) AS unread
+     FROM tb_chat_thread t
+     JOIN tb_chat_participant p ON p.tb_chat_thread_id = t.id AND p.role = 'helper'
+     WHERE t.tb_report_id = ? AND t.helper_account_id = ? AND t.deleted = 'N'`,
+    [reportId, helperAccountId]
+  )
+  const row = rows[0]
+  return row ? { threadId: row.threadId, unread: Number(row.unread ?? 0) } : null
 }
 
 /* ------------------------------------------------------------------ *

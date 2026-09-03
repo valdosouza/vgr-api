@@ -3,7 +3,7 @@ import * as repository from '@modules/reports/reports.repository'
 
 jest.mock('@shared/db/connection', () => ({
   __esModule: true,
-  default: { query: jest.fn() },
+  default: { query: jest.fn(), getConnection: jest.fn() },
 }))
 
 const mockedPool = pool as jest.Mocked<typeof pool>
@@ -190,5 +190,87 @@ describe('reports.repository — moderation SQL (decisions 162/167)', () => {
     await repository.listAttachedMedia(7)
     const [sql] = lastQuery()
     expect(sql.replace(/\s+/g, ' ')).toContain("m.status = 'available'")
+  })
+})
+
+/** Purge propagation to the chat (C1, decision 173/131): one transaction
+ *  nulls the report payload, the timeline payloads AND the chat text,
+ *  keeping every row as the statistical skeleton. */
+describe('reports.repository — purge reaches the chat (decisions 131/173)', () => {
+  const mockedGetConnection = (pool as any).getConnection as jest.Mock
+
+  beforeEach(() => jest.resetAllMocks())
+
+  it('purgeReport nulls chat text and marks purged in the SAME transaction as the report', async () => {
+    const conn = {
+      beginTransaction: jest.fn().mockResolvedValue(undefined),
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn(),
+      query: jest.fn().mockResolvedValue([{ affectedRows: 1 }]),
+    }
+    mockedGetConnection.mockResolvedValue(conn)
+
+    await repository.purgeReport(7)
+
+    expect(conn.beginTransaction).toHaveBeenCalled()
+    const statements = conn.query.mock.calls.map(([sql]) => sql.replace(/\s+/g, ' '))
+    expect(statements.some((s) => s.includes('UPDATE tb_report ') && s.includes("purged = 'S'"))).toBe(true)
+    expect(statements.some((s) => s.includes('UPDATE tb_report_timeline SET payload = NULL'))).toBe(true)
+    const chat = statements.find((s) => s.includes('tb_chat_message'))
+    expect(chat).toBeDefined()
+    expect(chat).toContain('text = NULL')
+    expect(chat).toContain("purged = 'S'")
+    expect(chat).toContain('tb_chat_thread')
+    expect(chat).not.toMatch(/DELETE/i)
+    expect(conn.commit).toHaveBeenCalled()
+    expect(conn.release).toHaveBeenCalled()
+    expect(mockedPool.query).not.toHaveBeenCalled()
+  })
+
+  it('a failure inside the purge rolls everything back', async () => {
+    const conn = {
+      beginTransaction: jest.fn().mockResolvedValue(undefined),
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn(),
+      query: jest.fn().mockResolvedValueOnce([{}]).mockRejectedValueOnce(new Error('boom')),
+    }
+    mockedGetConnection.mockResolvedValue(conn)
+    await expect(repository.purgeReport(7)).rejects.toThrow('boom')
+    expect(conn.rollback).toHaveBeenCalled()
+    expect(conn.commit).not.toHaveBeenCalled()
+    expect(conn.release).toHaveBeenCalled()
+  })
+
+  it('getOwnerChatSummary counts threads and the unread messages past the REPORTER pointer', async () => {
+    mockedPool.query
+      .mockResolvedValueOnce([[{ total: 2 }], undefined] as any)
+      .mockResolvedValueOnce([[{ total: 5 }], undefined] as any)
+
+    const summary = await repository.getOwnerChatSummary(7)
+
+    expect(summary).toEqual({ threads: 2, unread: 5 })
+    const [threadsSql, threadsParams] = mockedPool.query.mock.calls[0] as unknown as [string, unknown[]]
+    expect(threadsSql.replace(/\s+/g, ' ')).toContain("FROM tb_chat_thread WHERE tb_report_id = ? AND deleted = 'N'")
+    expect(threadsParams).toEqual([7])
+    const [unreadSql] = mockedPool.query.mock.calls[1] as unknown as [string, unknown[]]
+    const flat = unreadSql.replace(/\s+/g, ' ')
+    expect(flat).toContain("p.role = 'reporter'")
+    expect(flat).toContain('m.sender_participant_id <> p.id')
+    expect(flat).toContain('p.last_read_message_id IS NULL OR m.id > p.last_read_message_id')
+  })
+
+  it('getHelperChatSummary returns the helper thread and their unread, or null without a thread', async () => {
+    mockedPool.query.mockResolvedValueOnce([[{ threadId: 3, unread: 1 }], undefined] as any)
+    expect(await repository.getHelperChatSummary(7, 8)).toEqual({ threadId: 3, unread: 1 })
+    const [sql, params] = mockedPool.query.mock.calls[0] as unknown as [string, unknown[]]
+    const flat = sql.replace(/\s+/g, ' ')
+    expect(flat).toContain("p.role = 'helper'")
+    expect(flat).toContain('t.helper_account_id = ?')
+    expect(params).toEqual([7, 8])
+
+    mockedPool.query.mockResolvedValueOnce([[], undefined] as any)
+    expect(await repository.getHelperChatSummary(7, 8)).toBeNull()
   })
 })

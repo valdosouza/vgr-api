@@ -410,6 +410,15 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
     createdAt: event.createdAt.toISOString(),
   }))
 
+  // Chat entry point (C1, decision 172): counts only, so C2 can show the
+  // "conversas" / "conversar" affordance — the thread itself is /app-chat.
+  const chat = isOwner
+    ? await repository.getOwnerChatSummary(report.id)
+    : ((await repository.getHelperChatSummary(report.id, viewer.accountId as number)) ?? {
+        threadId: null,
+        unread: 0,
+      })
+
   const view: ReportView = {
     access: isOwner ? 'owner' : 'participant',
     ...common,
@@ -421,6 +430,7 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
     // Decision 167: owner and participants keep the case with an explicit
     // mark — and never the reason (it is the audit trail's, not theirs).
     hidden: report.hidden,
+    chat,
     timeline,
     media: (await repository.listAttachedMedia(report.id)).map((m) => ({
       publicId: m.publicId,

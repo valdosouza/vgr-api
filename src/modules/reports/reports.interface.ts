@@ -155,7 +155,22 @@ export type ReportView =
       media: MediaAttachmentView[]
       /** Owner only — absent for participants (decision 55's caution). */
       offers?: OfferView[]
+      /** Chat entry point (C1, decision 172): counts only — the owner
+       *  sees how many threads/unread, a helper participant their own
+       *  thread id (null before the first message) and unread. Never on
+       *  the public/summary views. */
+      chat: OwnerChatSummary | HelperChatSummary
     }
+
+export interface OwnerChatSummary {
+  threads: number
+  unread: number
+}
+
+export interface HelperChatSummary {
+  threadId: number | null
+  unread: number
+}
 
 /** Panel screen state (decisions 141/142). */
 export interface CaseFreezeState {

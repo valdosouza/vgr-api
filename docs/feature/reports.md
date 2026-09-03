@@ -119,6 +119,10 @@ state — once (decision 134).
 - `GET /app-reports/:id` now lists attachments: owner/participant get
   `{publicId, mime, width, height}`; the public open view carries
   publicIds only.
+- Since C1 (decision 172) the owner/participant views also carry `chat`
+  — owner `{ threads, unread }`, helper participant `{ threadId|null,
+  unread }`; never on public/summary — and `purgeReport` nulls the case's
+  chat text in the same transaction. See `docs/feature/chat.md`.
 
 Lifecycle propagation: resolve stamps the SAME +90d clock on the case's
 media (131); freeze/unfreeze cover report + timeline + attached media in

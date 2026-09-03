@@ -60,6 +60,8 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
     mockedValidate.mockResolvedValue([])
     mockedRepository.getTimeline.mockResolvedValue([])
     mockedRepository.findOffersWithNames.mockResolvedValue([])
+    mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 0, unread: 0 })
+    mockedRepository.getHelperChatSummary.mockResolvedValue(null)
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
     mockedRepository.findPendingUnfreeze.mockResolvedValue(null)
@@ -334,6 +336,8 @@ describe('hidden report on the APP plane (B2 — decisions 162/167)', () => {
     mockedTier.mockResolvedValue('low')
     mockedRepository.getTimeline.mockResolvedValue([])
     mockedRepository.findOffersWithNames.mockResolvedValue([])
+    mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 0, unread: 0 })
+    mockedRepository.getHelperChatSummary.mockResolvedValue(null)
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
   })
@@ -392,5 +396,58 @@ describe('hidden report on the APP plane (B2 — decisions 162/167)', () => {
     const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
     if (view.access !== 'owner') throw new Error('expected owner view')
     expect(view.timeline.map((e) => e.eventType)).toEqual(['created'])
+  })
+})
+
+/** C1 (decisions 168-177): the detail view carries the chat entry point
+ *  so C2 can render it — counts only, never a message, never a token. */
+describe('getReportView — chat entry point (C1, decision 172)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedTier.mockResolvedValue('low')
+    mockedRepository.getTimeline.mockResolvedValue([])
+    mockedRepository.findOffersWithNames.mockResolvedValue([])
+    mockedRepository.listAttachedMedia.mockResolvedValue([])
+    mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 2, unread: 3 })
+    mockedRepository.getHelperChatSummary.mockResolvedValue({ threadId: 5, unread: 1 })
+  })
+
+  it('the owner gets { threads, unread }', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    const view = await service.getReportView(7, OWNER_BY_KEY)
+    expect(view.access).toBe('owner')
+    expect((view as any).chat).toEqual({ threads: 2, unread: 3 })
+    expect(mockedRepository.getOwnerChatSummary).toHaveBeenCalledWith(7)
+    expect(mockedRepository.getHelperChatSummary).not.toHaveBeenCalled()
+  })
+
+  it('a helper participant gets { threadId, unread } — null threadId before the first message', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+    let view = await service.getReportView(7, STRANGER)
+    expect(view.access).toBe('participant')
+    expect((view as any).chat).toEqual({ threadId: 5, unread: 1 })
+    expect(mockedRepository.getHelperChatSummary).toHaveBeenCalledWith(7, 99)
+
+    mockedRepository.getHelperChatSummary.mockResolvedValue(null)
+    view = await service.getReportView(7, STRANGER)
+    expect((view as any).chat).toEqual({ threadId: null, unread: 0 })
+  })
+
+  it('public and summary views carry NO chat field', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    const open = await service.getReportView(7, STRANGER)
+    expect(open.access).toBe('public')
+    expect((open as any).chat).toBeUndefined()
+
+    mockedRepository.findById.mockResolvedValue(
+      row({ status: 'resolved', resolvedAt: new Date('2026-08-03T15:00:00Z') })
+    )
+    const summary = await service.getReportView(7, STRANGER)
+    expect(summary.access).toBe('summary')
+    expect((summary as any).chat).toBeUndefined()
+    expect(mockedRepository.getOwnerChatSummary).not.toHaveBeenCalled()
+    expect(mockedRepository.getHelperChatSummary).not.toHaveBeenCalled()
   })
 })

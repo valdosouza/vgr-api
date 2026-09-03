@@ -91,6 +91,8 @@ describe('report media — M2 (decisions 128/129/134/136/138)', () => {
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.getTimeline.mockResolvedValue([])
     mockedRepository.findOffersWithNames.mockResolvedValue([])
+    mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 0, unread: 0 })
+    mockedRepository.getHelperChatSummary.mockResolvedValue(null)
     mockedRepository.findPendingUnfreeze.mockResolvedValue(null)
     mockedRepository.markResolved.mockResolvedValue(true)
     mockedRepository.freeze.mockResolvedValue(true)
@@ -359,6 +361,8 @@ describe('report media under moderation (B2 — decision 162)', () => {
     mockedRepository.listAttachedMedia.mockResolvedValue([media({ status: 'available' })])
     mockedRepository.getTimeline.mockResolvedValue([])
     mockedRepository.findOffersWithNames.mockResolvedValue([])
+    mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 0, unread: 0 })
+    mockedRepository.getHelperChatSummary.mockResolvedValue(null)
 
     await service.getReportView(7, OWNER_BY_ACCOUNT)
     await service.getReportView(7, STRANGER)

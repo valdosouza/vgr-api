@@ -24,6 +24,14 @@ export const ErrorCodes = {
   /** Password was right but the account has 2FA enabled and the TOTP code
    *  is missing/wrong (decision 114) — client shows the code step. */
   TWO_FACTOR_REQUIRED: 'TWO_FACTOR_REQUIRED',
+  /** Masked chat (decision 173): the case is resolved or hidden — writes
+   *  are closed, reads stay. Ships with HTTP 409. */
+  CHAT_CLOSED: 'CHAT_CLOSED',
+  /** Per-participant message rate exceeded (decision 177). HTTP 429. */
+  RATE_LIMITED: 'RATE_LIMITED',
+  /** The message carries a direct contact (decision 171). HTTP 422, with
+   *  the same code on the `text` field and `params: { kind, match }`. */
+  CONTACT_NOT_ALLOWED: 'CONTACT_NOT_ALLOWED',
   UNAUTHORIZED: 'UNAUTHORIZED',
   FORBIDDEN: 'FORBIDDEN',
   INTERNAL: 'INTERNAL',
@@ -44,6 +52,9 @@ export const FieldErrorCodes = {
   INVALID_FORMAT: 'INVALID_FORMAT',
   INVALID_OPTION: 'INVALID_OPTION',
   INVALID_VALUE: 'INVALID_VALUE',
+  /** Chat text carries a phone / e-mail / URL / handle / messenger
+   *  invitation (decision 171); params = { kind, match }. */
+  CONTACT_NOT_ALLOWED: 'CONTACT_NOT_ALLOWED',
 } as const
 
 export type FieldErrorCode = (typeof FieldErrorCodes)[keyof typeof FieldErrorCodes]

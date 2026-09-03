@@ -113,11 +113,12 @@
 - [ ] Should accept trigger() with only a trusted contact configured, no pool membership required
 
 **ChatThread**
-> **Amended, 2026-08-22**: chat mascarado (decisão 54) é frente ainda não
-> aberta (`VGR-RESUMO.md` §6) — nenhum código existe para este agregado.
-> Cenários abaixo mantidos como desenho original para quando a frente abrir.
-- [ ] Should resolve every participant through MaskedIdentity before persisting a message — never a raw UserId
-- [ ] Should generate a distinct MaskedIdentity token per (ChatThread, UserId) pair, never reused across Reports
+> **Amended, 2026-09-03 (C1 — decisões 168–177)**: implementado em
+> `src/modules/messaging/` (`docs/feature/chat.md`). O helper precisa de CONTA
+> (169); a thread é chaveada por (report, helperAccount). Cenários abaixo
+> valem e estão em `chat.service.spec.ts`.
+- [x] Should resolve every participant through MaskedIdentity before persisting a message — never a raw UserId (`chat.service.spec` — mask matrix + "nothing identifying leaves the API")
+- [x] Should generate a distinct MaskedIdentity token per (ChatThread, UserId) pair, never reused across Reports (`chat.service.spec` — participant tokens)
 
 **PaymentIntent**
 > **Amended, 2026-08-22**: substituído pela *port* `PaymentRail` + adapter
@@ -225,7 +226,7 @@
 
 **PanicAlertRepository / ChatThreadRepository / PaymentIntentRepository**
 - [ ] Should persist a PanicAlert with its resolved recipient list intact
-- [ ] Should find-or-create exactly one ChatThread per (reportId, helperId) pair, never duplicating on repeated calls
+- [x] Should find-or-create exactly one ChatThread per (reportId, helperId) pair, never duplicating on repeated calls (amended 2026-09-03: helperId = helper ACCOUNT, 169; UNIQUE `(tb_report_id, helper_account_id)` + `insertThreadWithParticipants` returns null on the race — `chat.repository.spec`, `chat.service.spec`)
 - [ ] Should persist a PaymentIntent's mode and confirmation state accurately
 
 **DualControlAccessRepository**
@@ -376,12 +377,13 @@
   - When: `POST /api/panic/trigger` is called
   - Then: response is 201; PanicAlertTriggered is emitted with the active responder pool as recipients (decision 65)
 
-> **Amended, 2026-08-22**: chat mascarado ainda não implementado.
+> **Amended, 2026-09-03 (C1)**: chat mascarado implementado no plano do app
+> (`/app-chat/...`, nunca `/api/chat/...` — emenda E1); `chat.routes.spec.ts`.
 
-- [ ] **Should post and retrieve masked chat messages on a Report's thread**
-  - Given: an existing Report with a HelpOffer from Helper H
-  - When: `POST /api/chat/:reportId/messages` is called by H, then `GET /api/chat/:reportId/messages` by the Reporter
-  - Then: the Reporter's response shows H's message under a MaskedIdentity token, never H's raw UserId
+- [x] **Should post and retrieve masked chat messages on a Report's thread**
+  - Given: an existing Report with a HelpOffer from Helper H (H holds an account, 169)
+  - When: `POST /app-chat/:reportId/messages` is called by H (find-or-create, 173), then `GET /app-chat/:reportId/threads` and `GET /app-chat/threads/:threadId/messages` by the Reporter (account or `x-client-key`)
+  - Then: the Reporter's response shows H's message under a `participantToken`, never H's raw account id; H's `displayName` only when H chose it and the tier is not high (170)
 
 ### 3.2 Alternative and Error Flows
 
