@@ -4,6 +4,7 @@
 export { CATEGORIES, SUBJECTS } from '@shared/taxonomy/taxonomy'
 export type { Category, Subject } from '@shared/taxonomy/taxonomy'
 import type { Category, Subject } from '@shared/taxonomy/taxonomy'
+import type { RiskTier } from '@shared/risk/risk-tier'
 
 export type ReportStatus = 'open' | 'resolved'
 
@@ -149,4 +150,123 @@ export interface CaseFreezeState {
   frozenReason: string | null
   frozenAt: string | null
   pendingUnfreeze: { reason: string; requestedBy: number; requestedAt: string } | null
+}
+
+/* ------------------------------------------------------------------ *
+ * Panel plane — B1 of plano-moderacao-painel.md (decisions 159/160/166).
+ * ------------------------------------------------------------------ */
+
+/** Filters the panel search resolves BEFORE the SQL (tier -> categories,
+ *  date-only -> day bounds). The repository only knows columns. */
+export interface ReportSearchFilters {
+  id?: number
+  status?: ReportStatus
+  category?: Category
+  subject?: Subject
+  /** Tier filter resolved via shared/risk: the categories currently in
+   *  the requested tier, plus free-tag rows when the null tier matches. */
+  categories?: string[]
+  includeFreeTag?: boolean
+  frozen?: boolean
+  hasMedia?: boolean
+  createdFrom?: Date
+  createdTo?: Date
+  /** True when `to` was date-only: bound = next midnight, compared with `<`. */
+  createdToExclusive?: boolean
+}
+
+/** Narrow projection for the list: NO clientKey, NO reporterAccountId —
+ *  the search never needs identity, so it never loads it (decision 160). */
+export interface ReportSearchRow {
+  id: number
+  category: Category | null
+  freeTag: string | null
+  subject: Subject
+  anonymous: boolean
+  status: ReportStatus
+  frozen: boolean
+  purged: boolean
+  lat: number | null
+  lng: number | null
+  mediaCount: number
+  createdAt: Date
+  resolvedAt: Date | null
+}
+
+export interface ReportListItem {
+  reportId: number
+  category: Category | null
+  freeTag: string | null
+  subject: Subject
+  tier: RiskTier
+  status: ReportStatus
+  anonymous: boolean
+  frozen: boolean
+  purged: boolean
+  mediaCount: number
+  /** DEGRADED grid (decision 135); null when purged. */
+  position: { lat: number; lng: number } | null
+  createdAt: string
+  resolvedAt: string | null
+}
+
+export interface ReportPage {
+  items: ReportListItem[]
+  page: number
+  pageSize: number
+  total: number
+}
+
+/** The only identity shape the panel ever sees (decision 160). */
+export interface PanelActorRef {
+  accountId: number
+  displayName: string
+}
+
+export interface PanelMediaView {
+  publicId: string
+  mime: string
+  width: number
+  height: number
+  /** tb_media.status — the panel sees blocked/pending too (M3). */
+  status: string
+}
+
+export interface PanelOfferView {
+  helpOfferId: number
+  helpType: string
+  anonymous: boolean
+  helper: PanelActorRef | null
+  createdAt: string
+}
+
+export interface ReportPanelDetail {
+  reportId: number
+  category: Category | null
+  freeTag: string | null
+  subject: Subject
+  tier: RiskTier
+  status: ReportStatus
+  anonymous: boolean
+  frozen: boolean
+  frozenReason: string | null
+  frozenAt: string | null
+  purged: boolean
+  createdAt: string
+  resolvedAt: string | null
+  expiresAt: string | null
+  /** null when anonymous (160). */
+  reporter: PanelActorRef | null
+  /** Degraded grid + its precision in metres (159); null when purged. */
+  position: { lat: number; lng: number; precisionMeters: number } | null
+  detailFields: Record<string, unknown> | null
+  timeline: TimelineEventView[]
+  media: PanelMediaView[]
+  offers: PanelOfferView[]
+}
+
+export interface ReportExactPosition {
+  reportId: number
+  lat: number
+  lng: number
 }

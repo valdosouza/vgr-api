@@ -20,6 +20,8 @@ Index of project technical documentation for **VGR API**. Use the links below to
 | [**dual-control-access.md**](./feature/dual-control-access.md) | Two-distinct-approver gate for decrypting at-risk data (decision 45). | Optional |
 | [**risk-config.md**](./feature/risk-config.md) | RiskTier-per-Category registry, admin-managed (decision 46). | Optional |
 | [**monetization-config.md**](./feature/monetization-config.md) | Fee rule and allowed payment modes per Category (decisions 39, 58). | Optional |
+| [**reports.md**](./feature/reports.md) | App-plane report lifecycle: submit, edit, resolve, visibility, media attach, case freeze (decisions 134-142). | Optional |
+| [**report-moderation.md**](./feature/report-moderation.md) | Panel search + case detail with degraded position, audited reads and the exact-position grant (decisions 158-167). | Optional |
 | [**panic-responders.md**](./feature/panic-responders.md) | Authorized responder pool and its approval queue (decisions 51-52). | Optional |
 
 ## Recommended Reading Order

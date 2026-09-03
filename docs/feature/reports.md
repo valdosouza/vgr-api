@@ -151,6 +151,9 @@ Since P1 the panel screen exists (`app/docs/feature/case-freeze.md`):
 migration 034 flipped the `case_freeze` interface from kind 'R' to 'T'
 so it appears on the dynamic menu — same row, same grants.
 
+Panel search + case detail (`/api/reports`, decisions 158-167 — front
+142) live in `docs/feature/report-moderation.md`.
+
 ## Tests
 
 `reports.service.spec` (gate order, decision-32 choice, replay, dup race,
@@ -164,4 +167,4 @@ risk-config spec adapted to the shared read path.
 `reports.media.spec` (R4: bearer-secret attach, gate 451 before any
 write, same-account rule, one-attach 409, limit, replay, blur-only public
 high tier, resolved participant-only, lifecycle propagation).
-54 suites / 356 tests.
+64 suites / 478 tests (B1 of front 142 included).

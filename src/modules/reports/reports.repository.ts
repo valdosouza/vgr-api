@@ -1,5 +1,12 @@
 import pool from '@shared/db/connection'
-import { Category, ReportRow, ReportStatus, Subject } from '@modules/reports/reports.interface'
+import {
+  Category,
+  ReportRow,
+  ReportSearchFilters,
+  ReportSearchRow,
+  ReportStatus,
+  Subject,
+} from '@modules/reports/reports.interface'
 
 const REPORT_SELECT = `
   SELECT id, client_key AS clientKey, category, free_tag AS freeTag, subject,
@@ -442,4 +449,178 @@ export async function appendTimelineEvent(
     `INSERT INTO tb_report_timeline (tb_report_id, event_type, payload) VALUES (?, ?, ?)`,
     [reportId, eventType, payload === null ? null : JSON.stringify(payload)]
   )
+}
+
+/* ------------------------------------------------------------------ *
+ * Panel plane — B1 of plano-moderacao-painel.md (decisions 159/160/166).
+ * ------------------------------------------------------------------ */
+
+/**
+ * Paginated search for the panel list. Excludes soft-deleted rows, KEEPS
+ * purged ones (the statistical skeleton survives purge, 25/131). The
+ * projection deliberately omits client_key and reporter_account_id: the
+ * list never needs identity, so it never loads it (160). Sort is fixed:
+ * newest first, id as tiebreaker.
+ */
+export async function searchReports(
+  filters: ReportSearchFilters,
+  page: number,
+  pageSize: number
+): Promise<{ rows: ReportSearchRow[]; total: number }> {
+  const where: string[] = [`r.deleted = 'N'`]
+  const params: unknown[] = []
+
+  if (filters.id !== undefined) {
+    where.push('r.id = ?')
+    params.push(filters.id)
+  }
+  if (filters.status !== undefined) {
+    where.push('r.status = ?')
+    params.push(filters.status)
+  }
+  if (filters.category !== undefined) {
+    where.push('r.category = ?')
+    params.push(filters.category)
+  }
+  if (filters.subject !== undefined) {
+    where.push('r.subject = ?')
+    params.push(filters.subject)
+  }
+  if (filters.categories !== undefined) {
+    // Tier filter (159): the set resolved by the service. An empty set
+    // with no free-tag match can match nothing — expressed as 1=0.
+    const clauses: string[] = []
+    if (filters.categories.length > 0) {
+      clauses.push(`r.category IN (${filters.categories.map(() => '?').join(', ')})`)
+      params.push(...filters.categories)
+    }
+    if (filters.includeFreeTag) clauses.push('r.category IS NULL')
+    where.push(clauses.length > 0 ? `(${clauses.join(' OR ')})` : '1 = 0')
+  }
+  if (filters.frozen !== undefined) {
+    where.push('r.frozen = ?')
+    params.push(filters.frozen ? 'S' : 'N')
+  }
+  if (filters.hasMedia !== undefined) {
+    where.push(
+      `${filters.hasMedia ? '' : 'NOT '}EXISTS (
+         SELECT 1 FROM tb_report_media rm
+         JOIN tb_media m ON m.id = rm.tb_media_id AND m.deleted = 'N'
+         WHERE rm.tb_report_id = r.id AND rm.deleted = 'N')`
+    )
+  }
+  if (filters.createdFrom !== undefined) {
+    where.push('r.created_at >= ?')
+    params.push(filters.createdFrom)
+  }
+  if (filters.createdTo !== undefined) {
+    where.push(filters.createdToExclusive ? 'r.created_at < ?' : 'r.created_at <= ?')
+    params.push(filters.createdTo)
+  }
+
+  const whereSql = where.join(' AND ')
+  const [countRows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_report r WHERE ${whereSql}`,
+    params
+  )
+  const total = Number(countRows[0]?.total ?? 0)
+  if (total === 0) return { rows: [], total }
+
+  const [rows] = await pool.query<any[]>(
+    `SELECT r.id, r.category, r.free_tag AS freeTag, r.subject, r.anonymous, r.status,
+            r.frozen, r.purged, r.lat, r.lng, r.created_at AS createdAt,
+            r.resolved_at AS resolvedAt,
+            (SELECT COUNT(*) FROM tb_report_media rm
+             JOIN tb_media m ON m.id = rm.tb_media_id AND m.deleted = 'N'
+             WHERE rm.tb_report_id = r.id AND rm.deleted = 'N') AS mediaCount
+     FROM tb_report r
+     WHERE ${whereSql}
+     ORDER BY r.created_at DESC, r.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, pageSize, (page - 1) * pageSize]
+  )
+  return {
+    rows: rows.map((row) => ({
+      id: row.id,
+      category: (row.category as Category) ?? null,
+      freeTag: row.freeTag ?? null,
+      subject: row.subject as Subject,
+      anonymous: row.anonymous === 'S',
+      status: row.status as ReportStatus,
+      frozen: row.frozen === 'S',
+      purged: row.purged === 'S',
+      lat: row.lat === null ? null : Number(row.lat),
+      lng: row.lng === null ? null : Number(row.lng),
+      mediaCount: Number(row.mediaCount ?? 0),
+      createdAt: row.createdAt,
+      resolvedAt: row.resolvedAt ?? null,
+    })),
+    total,
+  }
+}
+
+/** Attached media for the PANEL detail: every living tb_media row with
+ *  its status — blocked/pending included (M3: the panel keeps reading
+ *  what the app plane no longer serves). */
+export async function findAttachedMediaWithStatus(
+  reportId: number
+): Promise<Array<{ publicId: string; mime: string; width: number; height: number; status: string }>> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT m.public_id AS publicId, m.mime, m.width, m.height, m.status
+     FROM tb_media m
+     JOIN tb_report_media rm ON rm.tb_media_id = m.id AND rm.deleted = 'N'
+     WHERE rm.tb_report_id = ? AND m.deleted = 'N'
+     ORDER BY rm.id`,
+    [reportId]
+  )
+  return rows.map((row) => ({
+    publicId: row.publicId,
+    mime: row.mime,
+    width: row.width,
+    height: row.height,
+    status: row.status,
+  }))
+}
+
+/** Display name only — never the e-mail (decision 160). */
+export async function findAccountDisplayName(accountId: number): Promise<string | null> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT display_name AS displayName FROM tb_user_account WHERE id = ?`,
+    [accountId]
+  )
+  return rows[0]?.displayName ?? null
+}
+
+/** Offers for the PANEL detail, with the helper's opaque id + display
+ *  name (masking of anonymous helpers happens in the service, 160). */
+export async function findOffersForPanel(
+  reportId: number
+): Promise<
+  Array<{
+    id: number
+    helpType: string
+    anonymous: boolean
+    helperAccountId: number | null
+    helperDisplayName: string | null
+    createdAt: Date
+  }>
+> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT o.id, o.help_type AS helpType, o.anonymous,
+            o.helper_account_id AS helperAccountId,
+            a.display_name AS helperDisplayName, o.created_at AS createdAt
+     FROM tb_help_offer o
+     LEFT JOIN tb_user_account a ON a.id = o.helper_account_id
+     WHERE o.tb_report_id = ? AND o.deleted = 'N'
+     ORDER BY o.created_at, o.id`,
+    [reportId]
+  )
+  return rows.map((row) => ({
+    id: row.id,
+    helpType: row.helpType,
+    anonymous: row.anonymous === 'S',
+    helperAccountId: row.helperAccountId ?? null,
+    helperDisplayName: row.helperDisplayName ?? null,
+    createdAt: row.createdAt,
+  }))
 }

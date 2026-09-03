@@ -49,6 +49,14 @@ export const InterfaceKeys = {
   /** kind 'R' resource (decisions 98/147 — migration 035): judging whether
    *  a reward's condition was fulfilled and instructing capture/cancel. */
   REWARD_MEDIATION: 'reward_mediation',
+  /** kind 'T' screen (decisions 165/166 — migration 038): searching
+   *  reports and opening a case detail on the panel plane (VIEW; every
+   *  detail read is audited). UPDATE is reserved for moderation (B2/B3). */
+  REPORTS: 'reports',
+  /** kind 'R' resource (decision 159 — migration 038, NO bootstrap): reading
+   *  a case's EXACT position. The detail serves the tier-degraded grid
+   *  (135); the exact point only leaves through this grant, audited. */
+  REPORT_EXACT_POSITION: 'report_exact_position',
 } as const
 
 export type InterfaceKey = (typeof InterfaceKeys)[keyof typeof InterfaceKeys]
