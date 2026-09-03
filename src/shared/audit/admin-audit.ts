@@ -15,10 +15,12 @@ import { redact } from '@shared/logger/redact'
  * context into the domain for no gain.
  */
 
-/** 'read' exists for evidence media only (decision 130 / plan M3): every
- *  panel look at a reporter's image leaves a row — mutating endpoints keep
- *  using the other actions. */
-export type AuditAction = 'create' | 'update' | 'delete' | 'grant' | 'state_change' | 'read'
+/** 'read' exists for evidence (decision 130 / plan M3, extended by 159/166
+ *  to the case detail and exact position): every panel look at evidence
+ *  leaves a row — mutating endpoints keep using the other actions. The
+ *  runtime tuple lives in audit-action.ts (see the note there). */
+import type { AuditAction } from '@shared/audit/audit-action'
+export type { AuditAction }
 
 export function auditAdminAction(entry: {
   actorId: number

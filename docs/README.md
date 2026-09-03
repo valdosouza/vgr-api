@@ -14,7 +14,7 @@ Index of project technical documentation for **VGR API**. Use the links below to
 | [**auth.md**](./feature/auth.md) | Panel login: revocable 15min sessions, progressive delay, mandatory TOTP 2FA (decisions 67, 112-114). | Optional |
 | [**app-auth.md**](./feature/app-auth.md) | App users (reporters/helpers): the SECOND authentication plane, never crossed with the panel (decisions 119-124). | Optional |
 | [**legal-gate.md**](./feature/legal-gate.md) | Per-jurisdiction execution blocking by capability, fail-closed (decisions 76-79, 103-109). | Optional |
-| [**admin-audit.md**](./feature/admin-audit.md) | Append-only trail of who did what on the panel (decision 116). | Optional |
+| [**admin-audit.md**](./feature/admin-audit.md) | Append-only trail of who did what on the panel, and its read-only screen endpoints under the `admin_audit` grant (decisions 116, 165, 166). | Optional |
 | [**media.md**](./feature/media.md) | Evidence images: BlobStore, EXIF-stripping re-encode, crypto-shredding (decisions 126-132). | Optional |
 | [**identity.md**](./feature/identity.md) | Role/AnonymityMode model and the append-only accountability log (decisions 4, 6, 23). | Optional |
 | [**dual-control-access.md**](./feature/dual-control-access.md) | Two-distinct-approver gate for decrypting at-risk data (decision 45). | Optional |

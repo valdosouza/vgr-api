@@ -462,10 +462,23 @@ empty tier set, count-0 short-circuit, hide and queue agree on `hidden`,
 `reports-admin.service.spec` (reviewed filter pass-through, list mark,
 detail `reviewedAt`/`reviewedBy` incl. the purged skeleton).
 
+## B5 — audit trail screen (decisions 116/158/165/166)
+
+The last phase of the front reads the `tb_admin_audit` rows the other
+four write (166: "auditing without a way to read is half of 116"). It is
+documented with the trail itself in
+[admin-audit.md](./admin-audit.md) (section "Reading the trail — B5"):
+module `src/modules/admin-audit/`, `GET /api/admin-audit` (list — who /
+what / when, no ip), `GET /api/admin-audit/facets`, `GET /api/admin-audit/:id`
+(the only response with the operator `ip`), all under the `admin_audit`
+VIEW grant (migration 042), none audited, none writing. The date rule of
+the B1 search moved to `shared/http/query-date.ts` so both modules share
+it without importing each other.
+
 ### Status
 
 - B1 — API side DONE 2026-09-02. 64 suites / 478 tests green; `tsc` clean.
 - B2 — API side DONE 2026-09-02. 72 suites / 563 tests green; `tsc` clean.
 - B4 — API side DONE 2026-09-02. 76 suites / 604 tests green; `tsc` clean.
 - B3 — API side DONE 2026-09-02 (uncommitted). 79 suites / 643 tests green; `tsc` clean.
-- B5 (audit trail screen) — pending, behind its own "pode seguir" (38).
+- B5 — API side DONE 2026-09-02 (uncommitted). 84 suites / 698 tests green; `tsc` clean.

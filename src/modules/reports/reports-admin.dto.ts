@@ -1,22 +1,19 @@
 import { z } from 'zod'
 import { CATEGORIES, SUBJECTS } from '@shared/taxonomy/taxonomy'
-import { FieldErrorCodes } from '@shared/errors/error-codes'
+import { isDateOnly, queryDate } from '@shared/http/query-date'
 
 /**
  * Panel search query (B1 — decision 166: the list is not audited, so it
  * must be cheap and precise). Query params arrive as strings: booleans
  * are the literal `true|false` (a bad value is INVALID_OPTION, decision
  * 83), numbers are coerced, dates accept ISO date-time or `YYYY-MM-DD`
- * (the service turns date-only bounds into whole days).
+ * (the service turns date-only bounds into whole days). The date rule
+ * was promoted to `shared/http/query-date` in B5 (admin-audit shares
+ * it); re-exported here so the B1–B4 call sites keep their import.
  */
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+export { isDateOnly, queryDate }
 
 const queryBool = z.enum(['true', 'false']).transform((value) => value === 'true')
-
-export const queryDate = z.string().refine(
-  (value) => DATE_ONLY.test(value) || !Number.isNaN(Date.parse(value)),
-  { message: 'Expected ISO date-time or YYYY-MM-DD', params: { code: FieldErrorCodes.INVALID_FORMAT } }
-)
 
 export const reportSearchQueryDto = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -61,7 +58,3 @@ export const reportStatsQueryDto = z.object({
 })
 
 export type ReportStatsQuery = z.infer<typeof reportStatsQueryDto>
-
-export function isDateOnly(value: string): boolean {
-  return DATE_ONLY.test(value)
-}

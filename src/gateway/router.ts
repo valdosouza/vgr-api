@@ -15,6 +15,7 @@ import mediaAdminRoutes from '@modules/media/media-admin.routes'
 import caseFreezeRoutes from '@modules/reports/case-freeze.routes'
 import reportsAdminRoutes from '@modules/reports/reports-admin.routes'
 import rewardMediationRoutes from '@modules/reward/reward-mediation.routes'
+import adminAuditRoutes from '@modules/admin-audit/admin-audit.routes'
 
 /**
  * Central router — every module is mounted here at /api/<module>,
@@ -61,5 +62,9 @@ router.use('/reports', reportsAdminRoutes)
 // Reward mediation (decisions 98/147) — judges fulfillment for the
 // recipient set fixed at reserve time (R0 first slice).
 router.use('/reward-mediation', rewardMediationRoutes)
+
+// Administrative trail READ (B5, decisions 116/165/166) — VIEW only, no
+// write route ever; reading the trail is not audited.
+router.use('/admin-audit', adminAuditRoutes)
 
 export default router

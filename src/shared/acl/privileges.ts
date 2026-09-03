@@ -61,6 +61,10 @@ export const InterfaceKeys = {
    *  report statistics under the k = 5 floor (VIEW only; not audited —
    *  aggregates are not evidence). */
   REPORT_STATS: 'report_stats',
+  /** kind 'T' screen (decisions 116/165/166 — migration 042): READING the
+   *  tb_admin_audit trail (VIEW only; the table stays append-only and
+   *  reading it is not itself audited). */
+  ADMIN_AUDIT: 'admin_audit',
 } as const
 
 export type InterfaceKey = (typeof InterfaceKeys)[keyof typeof InterfaceKeys]
