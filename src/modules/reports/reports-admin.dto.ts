@@ -28,6 +28,8 @@ export const reportSearchQueryDto = z.object({
   tier: z.enum(['low', 'medium', 'high']).optional(),
   frozen: queryBool.optional(),
   hasMedia: queryBool.optional(),
+  /** Moderation mark (B2, decision 162). */
+  hidden: queryBool.optional(),
   from: queryDate.optional(),
   to: queryDate.optional(),
 })

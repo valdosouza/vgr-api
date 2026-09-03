@@ -5,6 +5,7 @@ export { CATEGORIES, SUBJECTS } from '@shared/taxonomy/taxonomy'
 export type { Category, Subject } from '@shared/taxonomy/taxonomy'
 import type { Category, Subject } from '@shared/taxonomy/taxonomy'
 import type { RiskTier } from '@shared/risk/risk-tier'
+import type { ModerationReason } from '@shared/moderation/moderation-reason'
 
 export type ReportStatus = 'open' | 'resolved'
 
@@ -27,6 +28,12 @@ export interface ReportRow {
   frozenReason: string | null
   frozenAt: Date | null
   purged: boolean
+  /** Moderation (B2, decision 162) — orthogonal to status/frozen/retention. */
+  hidden: boolean
+  hiddenReasonCode: ModerationReason | null
+  hiddenNote: string | null
+  hiddenAt: Date | null
+  hiddenBy: number | null
   createdAt: Date
 }
 
@@ -136,6 +143,9 @@ export type ReportView =
       detailFields: Record<string, unknown> | null
       createdAt: string
       resolvedAt: string | null
+      /** Decision 167: the mark only — the reason belongs to the audit
+       *  trail, never to the reporter (nor to a participant). */
+      hidden: boolean
       timeline: TimelineEventView[]
       media: MediaAttachmentView[]
       /** Owner only — absent for participants (decision 55's caution). */
@@ -169,6 +179,7 @@ export interface ReportSearchFilters {
   includeFreeTag?: boolean
   frozen?: boolean
   hasMedia?: boolean
+  hidden?: boolean
   createdFrom?: Date
   createdTo?: Date
   /** True when `to` was date-only: bound = next midnight, compared with `<`. */
@@ -186,6 +197,7 @@ export interface ReportSearchRow {
   status: ReportStatus
   frozen: boolean
   purged: boolean
+  hidden: boolean
   lat: number | null
   lng: number | null
   mediaCount: number
@@ -203,6 +215,8 @@ export interface ReportListItem {
   anonymous: boolean
   frozen: boolean
   purged: boolean
+  /** Moderation mark (B2, decision 162). */
+  hidden: boolean
   mediaCount: number
   /** DEGRADED grid (decision 135); null when purged. */
   position: { lat: number; lng: number } | null
@@ -230,6 +244,10 @@ export interface PanelMediaView {
   height: number
   /** tb_media.status — the panel sees blocked/pending too (M3). */
   status: string
+  /** Block reason (B2, decision 162) — null unless status is 'blocked'. */
+  blockedReasonCode: ModerationReason | null
+  blockedNote: string | null
+  blockedAt: string | null
 }
 
 export interface PanelOfferView {
@@ -252,6 +270,13 @@ export interface ReportPanelDetail {
   frozenReason: string | null
   frozenAt: string | null
   purged: boolean
+  /** Moderation (B2, decision 162): the panel sees the reason — the
+   *  reporter never does (167). */
+  hidden: boolean
+  hiddenReasonCode: ModerationReason | null
+  hiddenNote: string | null
+  hiddenAt: string | null
+  hiddenBy: number | null
   createdAt: string
   resolvedAt: string | null
   expiresAt: string | null

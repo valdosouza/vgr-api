@@ -98,6 +98,10 @@ variant in the summary — decision 116 extended to reads for evidence).
 `Cache-Control: no-store` on the panel: a cached view would be an
 unaudited view.
 
+Moderation (B2, decision 162): `POST /api/media/:publicId/block` /
+`unblock` (`available <-> blocked`, `reports` UPDATE, catalog reason,
+audited, DEK untouched) — see `docs/feature/report-moderation.md` § B2.
+
 ## Retention (M3 — decisions 90/131)
 
 `gateway/scheduler.ts` (first scheduled work in the API, mechanism of

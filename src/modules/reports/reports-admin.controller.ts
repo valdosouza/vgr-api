@@ -1,9 +1,10 @@
 import { Request, Response } from 'express'
 import * as service from '@modules/reports/reports-admin.service'
 import { reportSearchQueryDto } from '@modules/reports/reports-admin.dto'
-import { handleError, parseId, zodToFields } from '@shared/http/controller-utils'
+import { handleError, parseBody, parseId, zodToFields } from '@shared/http/controller-utils'
 import { auditFromRequest } from '@shared/audit/admin-audit'
 import { ErrorCodes } from '@shared/errors/error-codes'
+import { moderationReasonDto } from '@shared/moderation/moderation-reason'
 
 /**
  * Panel plane of the report (B1 — decisions 159/166). Reads are audited
@@ -39,6 +40,50 @@ export async function detail(req: Request, res: Response): Promise<void> {
     res.json(result)
   } catch (err) {
     handleError(res, err, 'reports-admin.detail')
+  }
+}
+
+/**
+ * Moderation (B2 — decisions 162/163/167): every act leaves an audit row
+ * with the catalog reason and the note (116); the acting user becomes
+ * hidden_by. The note is always present in the summary (null when not
+ * given) so the trail has one shape.
+ */
+export async function hide(req: Request, res: Response): Promise<void> {
+  try {
+    const id = parseId(req, res)
+    if (id === null) return
+    const body = parseBody(moderationReasonDto, req, res)
+    if (body === null) return
+
+    const result = await service.hideReport(id, body, req.user!.userId)
+    auditFromRequest(req, 'state_change', 'report', id, {
+      action: 'hide',
+      reasonCode: body.reasonCode,
+      note: body.note ?? null,
+    })
+    res.json(result)
+  } catch (err) {
+    handleError(res, err, 'reports-admin.hide')
+  }
+}
+
+export async function unhide(req: Request, res: Response): Promise<void> {
+  try {
+    const id = parseId(req, res)
+    if (id === null) return
+    const body = parseBody(moderationReasonDto, req, res)
+    if (body === null) return
+
+    const result = await service.unhideReport(id, body, req.user!.userId)
+    auditFromRequest(req, 'state_change', 'report', id, {
+      action: 'unhide',
+      reasonCode: body.reasonCode,
+      note: body.note ?? null,
+    })
+    res.json(result)
+  } catch (err) {
+    handleError(res, err, 'reports-admin.unhide')
   }
 }
 

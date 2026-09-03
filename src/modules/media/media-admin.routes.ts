@@ -10,6 +10,11 @@ import * as controller from '@modules/media/media.controller'
  * media_evidence; the EXIF original ADDITIONALLY needs media_original,
  * which migration 029 grants to nobody by default (decision 130 — the
  * original is reporter-reidentifying data).
+ *
+ * B2 (decisions 162/165) adds block/unblock: a moderation act, so it is
+ * guarded by `reports` UPDATE — media_evidence only READS. Blocked media
+ * disappears from the app plane but stays readable here (a hold
+ * preserves evidence).
  */
 const router = Router()
 
@@ -28,7 +33,25 @@ function requireOriginalGrant(req: Request, res: Response, next: NextFunction): 
  *   get:
  *     summary: Streams a media variant to the panel; every read is audited (decisions 116/130)
  *     tags: [Media]
+ * /api/media/{publicId}/block:
+ *   post:
+ *     summary: available -> blocked with a catalog reason — one human with reports UPDATE, audited (decisions 162/163)
+ *     tags: [Media]
+ * /api/media/{publicId}/unblock:
+ *   post:
+ *     summary: blocked -> available under the same single-human rule, reason mandatory (decision 162)
+ *     tags: [Media]
  */
+router.post(
+  '/:publicId/block',
+  requirePrivilege(InterfaceKeys.REPORTS, Privileges.UPDATE),
+  controller.adminBlock
+)
+router.post(
+  '/:publicId/unblock',
+  requirePrivilege(InterfaceKeys.REPORTS, Privileges.UPDATE),
+  controller.adminUnblock
+)
 router.get(
   '/:publicId/:variant',
   requirePrivilege(InterfaceKeys.MEDIA_EVIDENCE, Privileges.VIEW),

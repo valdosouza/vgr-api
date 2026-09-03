@@ -75,7 +75,7 @@ export async function listNearby(
      JOIN (${CATEGORY_STRATEGY_SQL}) sc ON sc.category <=> r.category
      LEFT JOIN (${SUBJECT_STRATEGY_SQL}) ss
        ON ss.category = r.category AND ss.subject = r.subject
-     WHERE r.deleted = 'N' AND r.status = 'open'
+     WHERE r.deleted = 'N' AND r.status = 'open' AND r.hidden = 'N'
        AND r.lat BETWEEN ? AND ? AND r.lng BETWEEN ? AND ?
      HAVING distanceKm <= radiusKm
      ORDER BY ${ORDER_SQL[order]}

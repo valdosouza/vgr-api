@@ -339,6 +339,8 @@ export async function getReportMediaVariant(
     (await repository.hasOfferByAccount(report.id, viewer.accountId))
 
   if (!isOwner && !isParticipant) {
+    // A hidden case is gone for third parties, its media with it (162).
+    if (report.hidden) throw notFound()
     // Third parties: a resolved case shows only the closure summary (50).
     if (report.status !== 'open') throw notFound()
     const tier = await getRiskTier(report.category)
@@ -376,6 +378,9 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
     (await repository.hasOfferByAccount(report.id, viewer.accountId))
 
   if (!isOwner && !isParticipant) {
+    // Hidden by moderation (162): gone from the public detail AND from the
+    // closure summary — 404, never a hint that it exists.
+    if (report.hidden) throw notFound()
     if (report.status === 'resolved') {
       return {
         access: 'summary',
@@ -413,6 +418,9 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
     detailFields: report.detailFields,
     createdAt: report.createdAt.toISOString(),
     resolvedAt: report.resolvedAt ? report.resolvedAt.toISOString() : null,
+    // Decision 167: owner and participants keep the case with an explicit
+    // mark — and never the reason (it is the audit trail's, not theirs).
+    hidden: report.hidden,
     timeline,
     media: (await repository.listAttachedMedia(report.id)).map((m) => ({
       publicId: m.publicId,

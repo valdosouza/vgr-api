@@ -28,6 +28,11 @@ function row(overrides: Partial<ReportRow> = {}): ReportRow {
     frozenReason: null,
     frozenAt: null,
     purged: false,
+    hidden: false,
+    hiddenReasonCode: null,
+    hiddenNote: null,
+    hiddenAt: null,
+    hiddenBy: null,
     createdAt: new Date('2026-08-03T12:34:56Z'),
     ...overrides,
   }
@@ -43,6 +48,7 @@ function searchRow(overrides: Partial<ReportSearchRow> = {}): ReportSearchRow {
     status: 'open',
     frozen: false,
     purged: false,
+    hidden: false,
     lat: -23.551234,
     lng: -46.634567,
     mediaCount: 2,
@@ -153,6 +159,7 @@ describe('reports-admin.service — search (decisions 159/166)', () => {
       anonymous: true,
       frozen: false,
       purged: false,
+      hidden: false,
       mediaCount: 2,
       position: { lat: -23.55, lng: -46.63 }, // high tier grid 0.01
       createdAt: '2026-08-03T12:34:56.000Z',
@@ -188,8 +195,8 @@ describe('reports-admin.service — detail (decisions 159/160/166)', () => {
       { eventType: 'created', payload: null, createdAt: new Date('2026-08-03T12:34:56Z') },
     ])
     mockedRepository.findAttachedMediaWithStatus.mockResolvedValue([
-      { publicId: 'aaaaaaaa-0000-4000-8000-000000000001', mime: 'image/webp', width: 10, height: 10, status: 'available' },
-      { publicId: 'aaaaaaaa-0000-4000-8000-000000000002', mime: 'image/webp', width: 10, height: 10, status: 'blocked' },
+      { publicId: 'aaaaaaaa-0000-4000-8000-000000000001', mime: 'image/webp', width: 10, height: 10, status: 'available', blockedReasonCode: null, blockedNote: null, blockedAt: null },
+      { publicId: 'aaaaaaaa-0000-4000-8000-000000000002', mime: 'image/webp', width: 10, height: 10, status: 'blocked', blockedReasonCode: null, blockedNote: null, blockedAt: null },
     ])
     mockedRepository.findOffersForPanel.mockResolvedValue([
       { id: 1, helpType: 'share', anonymous: true, helperAccountId: 99, helperDisplayName: 'Hidden', createdAt: new Date('2026-08-04T00:00:00Z') },
@@ -263,8 +270,8 @@ describe('reports-admin.service — detail (decisions 159/160/166)', () => {
       timeline: [{ eventType: 'created', payload: null, createdAt: '2026-08-03T12:34:56.000Z' }],
     })
     expect(detail.media).toEqual([
-      { publicId: 'aaaaaaaa-0000-4000-8000-000000000001', mime: 'image/webp', width: 10, height: 10, status: 'available' },
-      { publicId: 'aaaaaaaa-0000-4000-8000-000000000002', mime: 'image/webp', width: 10, height: 10, status: 'blocked' },
+      { publicId: 'aaaaaaaa-0000-4000-8000-000000000001', mime: 'image/webp', width: 10, height: 10, status: 'available', blockedReasonCode: null, blockedNote: null, blockedAt: null },
+      { publicId: 'aaaaaaaa-0000-4000-8000-000000000002', mime: 'image/webp', width: 10, height: 10, status: 'blocked', blockedReasonCode: null, blockedNote: null, blockedAt: null },
     ])
   })
 

@@ -75,6 +75,10 @@ describe('/api/media panel routes (M3 — decisions 116/130)', () => {
       dekWrapped: args.dekWrapped,
       expiresAt: null,
       frozen: false,
+      blockedReasonCode: null,
+      blockedNote: null,
+      blockedAt: null,
+      blockedBy: null,
     }
     mockedRepository.findByPublicId.mockResolvedValue(row)
   })

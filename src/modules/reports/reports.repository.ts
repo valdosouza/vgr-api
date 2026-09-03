@@ -7,6 +7,7 @@ import {
   ReportStatus,
   Subject,
 } from '@modules/reports/reports.interface'
+import { ModerationReason } from '@shared/moderation/moderation-reason'
 
 const REPORT_SELECT = `
   SELECT id, client_key AS clientKey, category, free_tag AS freeTag, subject,
@@ -14,6 +15,8 @@ const REPORT_SELECT = `
          reporter_account_id AS reporterAccountId, status,
          resolved_at AS resolvedAt, expires_at AS expiresAt, frozen,
          frozen_reason AS frozenReason, frozen_at AS frozenAt, purged,
+         hidden, hidden_reason_code AS hiddenReasonCode, hidden_note AS hiddenNote,
+         hidden_at AS hiddenAt, hidden_by AS hiddenBy,
          created_at AS createdAt
   FROM tb_report`
 
@@ -41,6 +44,11 @@ function toReport(row: any): ReportRow {
     frozenReason: row.frozenReason ?? null,
     frozenAt: row.frozenAt ?? null,
     purged: row.purged === 'S',
+    hidden: row.hidden === 'S',
+    hiddenReasonCode: row.hiddenReasonCode ?? null,
+    hiddenNote: row.hiddenNote ?? null,
+    hiddenAt: row.hiddenAt ?? null,
+    hiddenBy: row.hiddenBy ?? null,
     createdAt: row.createdAt,
   }
 }
@@ -230,6 +238,39 @@ export async function approveUnfreezeRequest(requestId: number, approvedBy: numb
      WHERE id = ?`,
     [approvedBy, requestId]
   )
+}
+
+/**
+ * Hide (B2, decision 162): atomic hidden N -> S — 0 rows = already
+ * hidden (or gone). ONLY the five hidden_* columns move: retention
+ * (expires_at), freeze and status are not moderation's, and no timeline
+ * event is written (167).
+ */
+export async function hideReport(
+  id: number,
+  reasonCode: ModerationReason,
+  note: string | null,
+  actorId: number
+): Promise<boolean> {
+  const [result] = await pool.query<any>(
+    `UPDATE tb_report
+     SET hidden = 'S', hidden_reason_code = ?, hidden_note = ?, hidden_at = NOW(), hidden_by = ?
+     WHERE id = ? AND hidden = 'N' AND deleted = 'N'`,
+    [reasonCode, note, actorId, id]
+  )
+  return result.affectedRows > 0
+}
+
+/** Unhide (162): atomic S -> N, clearing the five columns — the reason for
+ *  reverting lives in tb_admin_audit, not on the row. */
+export async function unhideReport(id: number): Promise<boolean> {
+  const [result] = await pool.query<any>(
+    `UPDATE tb_report
+     SET hidden = 'N', hidden_reason_code = NULL, hidden_note = NULL, hidden_at = NULL, hidden_by = NULL
+     WHERE id = ? AND hidden = 'S' AND deleted = 'N'`,
+    [id]
+  )
+  return result.affectedRows > 0
 }
 
 /** Due for the purge job (decisions 25/131): expiry reached, not frozen. */
@@ -501,6 +542,10 @@ export async function searchReports(
     where.push('r.frozen = ?')
     params.push(filters.frozen ? 'S' : 'N')
   }
+  if (filters.hidden !== undefined) {
+    where.push('r.hidden = ?')
+    params.push(filters.hidden ? 'S' : 'N')
+  }
   if (filters.hasMedia !== undefined) {
     where.push(
       `${filters.hasMedia ? '' : 'NOT '}EXISTS (
@@ -528,7 +573,7 @@ export async function searchReports(
 
   const [rows] = await pool.query<any[]>(
     `SELECT r.id, r.category, r.free_tag AS freeTag, r.subject, r.anonymous, r.status,
-            r.frozen, r.purged, r.lat, r.lng, r.created_at AS createdAt,
+            r.frozen, r.purged, r.hidden, r.lat, r.lng, r.created_at AS createdAt,
             r.resolved_at AS resolvedAt,
             (SELECT COUNT(*) FROM tb_report_media rm
              JOIN tb_media m ON m.id = rm.tb_media_id AND m.deleted = 'N'
@@ -549,6 +594,7 @@ export async function searchReports(
       status: row.status as ReportStatus,
       frozen: row.frozen === 'S',
       purged: row.purged === 'S',
+      hidden: row.hidden === 'S',
       lat: row.lat === null ? null : Number(row.lat),
       lng: row.lng === null ? null : Number(row.lng),
       mediaCount: Number(row.mediaCount ?? 0),
@@ -562,11 +608,22 @@ export async function searchReports(
 /** Attached media for the PANEL detail: every living tb_media row with
  *  its status — blocked/pending included (M3: the panel keeps reading
  *  what the app plane no longer serves). */
-export async function findAttachedMediaWithStatus(
-  reportId: number
-): Promise<Array<{ publicId: string; mime: string; width: number; height: number; status: string }>> {
+export async function findAttachedMediaWithStatus(reportId: number): Promise<
+  Array<{
+    publicId: string
+    mime: string
+    width: number
+    height: number
+    status: string
+    blockedReasonCode: ModerationReason | null
+    blockedNote: string | null
+    blockedAt: Date | null
+  }>
+> {
   const [rows] = await pool.query<any[]>(
-    `SELECT m.public_id AS publicId, m.mime, m.width, m.height, m.status
+    `SELECT m.public_id AS publicId, m.mime, m.width, m.height, m.status,
+            m.blocked_reason_code AS blockedReasonCode, m.blocked_note AS blockedNote,
+            m.blocked_at AS blockedAt
      FROM tb_media m
      JOIN tb_report_media rm ON rm.tb_media_id = m.id AND rm.deleted = 'N'
      WHERE rm.tb_report_id = ? AND m.deleted = 'N'
@@ -579,6 +636,9 @@ export async function findAttachedMediaWithStatus(
     width: row.width,
     height: row.height,
     status: row.status,
+    blockedReasonCode: row.blockedReasonCode ?? null,
+    blockedNote: row.blockedNote ?? null,
+    blockedAt: row.blockedAt ?? null,
   }))
 }
 

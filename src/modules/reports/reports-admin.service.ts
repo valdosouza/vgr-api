@@ -14,6 +14,7 @@ import { getRiskTier, RiskTier } from '@shared/risk/risk-tier'
 import { degradePosition, GRID_BY_TIER } from '@shared/geo/degrade'
 import { ErrorCodes } from '@shared/errors/error-codes'
 import { HttpError } from '@shared/errors/http-error'
+import { ModerationReasonInput } from '@shared/moderation/moderation-reason'
 
 /**
  * Panel plane of the report (B1 of plano-moderacao-painel.md, decisions
@@ -80,6 +81,7 @@ export async function searchReports(query: ReportSearchQuery): Promise<ReportPag
     subject: query.subject,
     frozen: query.frozen,
     hasMedia: query.hasMedia,
+    hidden: query.hidden,
     ...(query.tier === undefined ? {} : await resolveTier(query.tier)),
     ...dateBounds(query),
   }
@@ -98,6 +100,7 @@ export async function searchReports(query: ReportSearchQuery): Promise<ReportPag
       anonymous: row.anonymous,
       frozen: row.frozen,
       purged: row.purged,
+      hidden: row.hidden,
       mediaCount: row.mediaCount,
       // The same grid as the feed (135) — or the sharper surface betrays
       // the position; purged rows have no position at all (25/131).
@@ -137,6 +140,11 @@ export async function getReportPanelDetail(reportId: number): Promise<ReportPane
     frozenReason: report.frozenReason,
     frozenAt: report.frozenAt ? report.frozenAt.toISOString() : null,
     purged: report.purged,
+    hidden: report.hidden,
+    hiddenReasonCode: report.hiddenReasonCode,
+    hiddenNote: report.hiddenNote,
+    hiddenAt: report.hiddenAt ? report.hiddenAt.toISOString() : null,
+    hiddenBy: report.hiddenBy,
     createdAt: report.createdAt.toISOString(),
     resolvedAt: report.resolvedAt ? report.resolvedAt.toISOString() : null,
     expiresAt: report.expiresAt ? report.expiresAt.toISOString() : null,
@@ -171,7 +179,12 @@ export async function getReportPanelDetail(reportId: number): Promise<ReportPane
       payload: event.payload,
       createdAt: event.createdAt.toISOString(),
     })),
-    media,
+    // Blocked media stays listed WITH its reason: the panel preserves
+    // evidence the app plane no longer serves (M3 / 162).
+    media: media.map((item) => ({
+      ...item,
+      blockedAt: item.blockedAt ? item.blockedAt.toISOString() : null,
+    })),
     offers: offers.map((offer) => ({
       helpOfferId: offer.id,
       helpType: offer.helpType,
@@ -183,6 +196,58 @@ export async function getReportPanelDetail(reportId: number): Promise<ReportPane
       createdAt: offer.createdAt.toISOString(),
     })),
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Moderation — B2 of plano-moderacao-painel.md (decisions 162/163/167).
+ * ONE human with `reports` UPDATE + a catalog reason + an audit row
+ * (written by the controller, 116); reverting follows the SAME rule —
+ * nothing here destroys evidence, so no dual control (162 vs 141d).
+ * Retention, freeze and the timeline are never touched (162/167).
+ * ------------------------------------------------------------------ */
+
+const alreadyHidden = () =>
+  new HttpError(409, 'Report is already hidden', undefined, ErrorCodes.DUPLICATE)
+const notHidden = () => new HttpError(409, 'Report is not hidden', undefined, ErrorCodes.DUPLICATE)
+
+/** Missing, soft-deleted and purged all answer 404: a purged skeleton has
+ *  nothing left to hide (25/131). */
+async function moderatableReport(reportId: number): Promise<ReportRow> {
+  const report = await repository.findById(reportId)
+  if (!report || report.purged) throw notFound()
+  return report
+}
+
+export async function hideReport(
+  reportId: number,
+  input: ModerationReasonInput,
+  actorId: number
+): Promise<ReportPanelDetail> {
+  const report = await moderatableReport(reportId)
+  if (report.hidden) throw alreadyHidden()
+  // The atomic WHERE hidden='N' makes a concurrent hide lose cleanly.
+  const transitioned = await repository.hideReport(
+    reportId,
+    input.reasonCode,
+    input.note ?? null,
+    actorId
+  )
+  if (!transitioned) throw alreadyHidden()
+  return getReportPanelDetail(reportId)
+}
+
+/** The reason for reverting is mandatory too (162) — it travels to the
+ *  audit trail through the controller; the row itself is cleared. */
+export async function unhideReport(
+  reportId: number,
+  _input: ModerationReasonInput,
+  _actorId: number
+): Promise<ReportPanelDetail> {
+  const report = await moderatableReport(reportId)
+  if (!report.hidden) throw notHidden()
+  const transitioned = await repository.unhideReport(reportId)
+  if (!transitioned) throw notHidden()
+  return getReportPanelDetail(reportId)
 }
 
 /** The ONE exit for the exact position (159/135) — behind the stacked

@@ -41,6 +41,11 @@ function row(overrides: Partial<ReportRow> = {}): ReportRow {
     frozenReason: null,
     frozenAt: null,
     purged: false,
+    hidden: false,
+    hiddenReasonCode: null,
+    hiddenNote: null,
+    hiddenAt: null,
+    hiddenBy: null,
     createdAt: new Date('2026-08-03T14:37:42Z'),
     ...overrides,
   }
@@ -318,5 +323,72 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
     const result = await service.purgeExpiredReports()
     expect(result.purged).toBe(3)
     expect(mockedRepository.purgeReport).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('hidden report on the APP plane (B2 — decisions 162/167)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedTier.mockResolvedValue('low')
+    mockedRepository.getTimeline.mockResolvedValue([])
+    mockedRepository.findOffersWithNames.mockResolvedValue([])
+    mockedRepository.listAttachedMedia.mockResolvedValue([])
+    mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+  })
+
+  it('a stranger gets 404 on a hidden OPEN case — gone from the public detail', async () => {
+    mockedRepository.findById.mockResolvedValue(row({ hidden: true, hiddenReasonCode: 'spam' }))
+    await expect(service.getReportView(7, STRANGER)).rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  it('a stranger gets 404 on a hidden RESOLVED case — no closure summary either', async () => {
+    mockedRepository.findById.mockResolvedValue(
+      row({ hidden: true, hiddenReasonCode: 'spam', status: 'resolved', resolvedAt: new Date() })
+    )
+    await expect(service.getReportView(7, STRANGER)).rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  it('the OWNER keeps seeing it, with hidden=true and NO reason (167)', async () => {
+    mockedRepository.findById.mockResolvedValue(
+      row({ hidden: true, hiddenReasonCode: 'spam', hiddenNote: 'copy of #5', hiddenBy: 3 })
+    )
+
+    const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+
+    expect(view.access).toBe('owner')
+    expect((view as any).hidden).toBe(true)
+    const serialized = JSON.stringify(view)
+    expect(serialized).not.toContain('spam')
+    expect(serialized).not.toContain('copy of #5')
+    expect(serialized).not.toContain('hiddenReason')
+    expect(serialized).not.toContain('hiddenBy')
+    expect(serialized).not.toContain('hiddenAt')
+  })
+
+  it('a PARTICIPANT sees the same mark', async () => {
+    mockedRepository.findById.mockResolvedValue(row({ hidden: true, hiddenReasonCode: 'abuse' }))
+    mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+
+    const view = await service.getReportView(7, STRANGER)
+
+    expect(view.access).toBe('participant')
+    expect((view as any).hidden).toBe(true)
+    expect(JSON.stringify(view)).not.toContain('abuse')
+  })
+
+  it('a visible case answers hidden=false to the owner', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    const view = await service.getReportView(7, OWNER_BY_KEY)
+    expect((view as any).hidden).toBe(false)
+  })
+
+  it('no timeline event is ever written by moderation (167) — the timeline stays as it was', async () => {
+    mockedRepository.findById.mockResolvedValue(row({ hidden: true }))
+    mockedRepository.getTimeline.mockResolvedValue([
+      { eventType: 'created', payload: null, createdAt: new Date('2026-08-03T14:37:42Z') },
+    ])
+    const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+    if (view.access !== 'owner') throw new Error('expected owner view')
+    expect(view.timeline.map((e) => e.eventType)).toEqual(['created'])
   })
 })

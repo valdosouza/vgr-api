@@ -2,6 +2,7 @@
  *  became the second reader (M2, amendment-E8 pattern) — re-exported here
  *  to keep the module surface stable. */
 export type { MediaVariant } from '@shared/storage/media-object'
+import type { ModerationReason } from '@shared/moderation/moderation-reason'
 
 export type MediaClass = 'evidence' | 'avatar'
 
@@ -30,6 +31,21 @@ export interface MediaRow {
   dekWrapped: string | null
   expiresAt: Date | null
   frozen: boolean
+  /** Moderation hold (B2, decision 162) — set while status is 'blocked'.
+   *  Orthogonal to frozen (141b) and to the retention clock (131). */
+  blockedReasonCode: ModerationReason | null
+  blockedNote: string | null
+  blockedAt: Date | null
+  blockedBy: number | null
+}
+
+/** What the panel gets back from block/unblock (B2). */
+export interface MediaModerationState {
+  publicId: string
+  status: MediaStatus
+  blockedReasonCode: ModerationReason | null
+  blockedNote: string | null
+  blockedAt: string | null
 }
 
 export interface IngestInput {

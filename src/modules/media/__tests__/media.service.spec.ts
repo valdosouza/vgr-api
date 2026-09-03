@@ -57,6 +57,10 @@ function insertedRow(overrides: Partial<MediaRow> = {}): MediaRow {
     dekWrapped: args.dekWrapped,
     expiresAt: null,
     frozen: false,
+    blockedReasonCode: null,
+    blockedNote: null,
+    blockedAt: null,
+    blockedBy: null,
     ...overrides,
   }
 }

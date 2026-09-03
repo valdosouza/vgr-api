@@ -1,5 +1,6 @@
 import pool from '@shared/db/connection'
 import { MediaRow } from '@modules/media/media.interface'
+import { ModerationReason } from '@shared/moderation/moderation-reason'
 
 const MEDIA_SELECT = `
   SELECT id, public_id AS publicId, class, uploader_account_id AS uploaderAccountId,
@@ -8,7 +9,9 @@ const MEDIA_SELECT = `
          sha256_original AS sha256Original, sha256,
          storage_prefix AS storagePrefix, keep_original AS keepOriginal,
          exif_warning_version AS exifWarningVersion, dek_wrapped AS dekWrapped,
-         expires_at AS expiresAt, frozen
+         expires_at AS expiresAt, frozen,
+         blocked_reason_code AS blockedReasonCode, blocked_note AS blockedNote,
+         blocked_at AS blockedAt, blocked_by AS blockedBy
   FROM tb_media`
 
 function toMedia(row: any): MediaRow {
@@ -32,6 +35,10 @@ function toMedia(row: any): MediaRow {
     dekWrapped: row.dekWrapped ?? null,
     expiresAt: row.expiresAt ?? null,
     frozen: row.frozen === 'S',
+    blockedReasonCode: row.blockedReasonCode ?? null,
+    blockedNote: row.blockedNote ?? null,
+    blockedAt: row.blockedAt ?? null,
+    blockedBy: row.blockedBy ?? null,
   }
 }
 
@@ -87,6 +94,40 @@ export async function findByPublicId(publicId: string): Promise<MediaRow | null>
     [publicId]
   )
   return rows[0] ? toMedia(rows[0]) : null
+}
+
+/**
+ * Block (B2, decision 162): atomic available -> blocked — 0 rows = the
+ * status moved meanwhile. The DEK is NOT touched: a moderation hold
+ * preserves evidence for an authority (M3 — the panel keeps reading it);
+ * only the shred of decision 131 ever clears it. Retention and freeze
+ * are not moderation's either.
+ */
+export async function blockMedia(
+  id: number,
+  reasonCode: ModerationReason,
+  note: string | null,
+  actorId: number
+): Promise<boolean> {
+  const [result] = await pool.query<any>(
+    `UPDATE tb_media
+     SET status = 'blocked', blocked_reason_code = ?, blocked_note = ?, blocked_at = NOW(), blocked_by = ?
+     WHERE id = ? AND status = 'available' AND deleted = 'N'`,
+    [reasonCode, note, actorId, id]
+  )
+  return result.affectedRows > 0
+}
+
+/** Unblock (162): atomic blocked -> available, clearing the four columns —
+ *  the reason for reverting lives in tb_admin_audit. */
+export async function unblockMedia(id: number): Promise<boolean> {
+  const [result] = await pool.query<any>(
+    `UPDATE tb_media
+     SET status = 'available', blocked_reason_code = NULL, blocked_note = NULL, blocked_at = NULL, blocked_by = NULL
+     WHERE id = ? AND status = 'blocked' AND deleted = 'N'`,
+    [id]
+  )
+  return result.affectedRows > 0
 }
 
 /** Crypto-shredding (decision 131): clearing the wrapped DEK IS the

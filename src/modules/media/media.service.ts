@@ -1,6 +1,13 @@
 import { createHash, randomUUID } from 'crypto'
 import * as repository from '@modules/media/media.repository'
-import { IngestInput, IngestResult, MediaVariant } from '@modules/media/media.interface'
+import {
+  IngestInput,
+  IngestResult,
+  MediaModerationState,
+  MediaRow,
+  MediaVariant,
+} from '@modules/media/media.interface'
+import { ModerationReasonInput } from '@shared/moderation/moderation-reason'
 import { blurred, normalize, OUTPUT_MIME, sniffMime, thumbnail } from '@modules/media/media-pipeline'
 import { mediaConfig } from '@shared/config/env'
 import { generateDek, sealBlob, wrapDek } from '@shared/crypto/media-cipher'
@@ -178,4 +185,62 @@ export async function openVariantForPanel(
     data,
     mime: variant === 'original' ? media.mimeOriginal : media.mime,
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Moderation — B2 of plano-moderacao-painel.md (decisions 162/163).
+ * ONE human with `reports` UPDATE (165) + a catalog reason + an audit
+ * row written by the controller (116). The transition is available <->
+ * blocked and nothing else moves: the DEK stays (a hold PRESERVES
+ * evidence — the panel keeps reading it, M3), the retention clock and
+ * the freeze are untouched. Everything that must not be moderated
+ * answers 404, never 403/409 — whether a publicId exists is information.
+ * ------------------------------------------------------------------ */
+
+const mediaNotFound = () => new HttpError(404, 'Media not found', undefined, ErrorCodes.NOT_FOUND)
+
+function moderationState(media: MediaRow): MediaModerationState {
+  return {
+    publicId: media.publicId,
+    status: media.status,
+    blockedReasonCode: media.blockedReasonCode,
+    blockedNote: media.blockedNote,
+    blockedAt: media.blockedAt ? media.blockedAt.toISOString() : null,
+  }
+}
+
+async function requireStatus(publicId: string, status: MediaRow['status']): Promise<MediaRow> {
+  const media = await repository.findByPublicId(publicId)
+  if (!media || media.status !== status) throw mediaNotFound()
+  return media
+}
+
+export async function blockMedia(
+  publicId: string,
+  input: ModerationReasonInput,
+  actorId: number
+): Promise<MediaModerationState> {
+  const media = await requireStatus(publicId, 'available')
+  // The atomic WHERE status='available' makes a concurrent act lose cleanly.
+  const transitioned = await repository.blockMedia(
+    media.id,
+    input.reasonCode,
+    input.note ?? null,
+    actorId
+  )
+  if (!transitioned) throw mediaNotFound()
+  return moderationState(await requireStatus(publicId, 'blocked'))
+}
+
+/** The reason for reverting is mandatory too (162) — it reaches the
+ *  audit trail through the controller; the row itself is cleared. */
+export async function unblockMedia(
+  publicId: string,
+  _input: ModerationReasonInput,
+  _actorId: number
+): Promise<MediaModerationState> {
+  const media = await requireStatus(publicId, 'blocked')
+  const transitioned = await repository.unblockMedia(media.id)
+  if (!transitioned) throw mediaNotFound()
+  return moderationState(await requireStatus(publicId, 'available'))
 }

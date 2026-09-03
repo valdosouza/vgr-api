@@ -4,6 +4,7 @@ import { mediaVariantDto, uploadMediaDto } from '@modules/media/media.dto'
 import { handleError, parseBody } from '@shared/http/controller-utils'
 import { ErrorCodes } from '@shared/errors/error-codes'
 import { auditFromRequest } from '@shared/audit/admin-audit'
+import { moderationReasonDto } from '@shared/moderation/moderation-reason'
 
 export async function upload(req: Request, res: Response): Promise<void> {
   try {
@@ -72,5 +73,42 @@ export async function adminStream(req: Request, res: Response): Promise<void> {
     res.send(data)
   } catch (err) {
     handleError(res, err, 'media.adminStream')
+  }
+}
+
+/** Panel moderation (B2 — decisions 162/163): every act leaves an audit
+ *  row with the catalog reason and the note (116); the note is always in
+ *  the summary (null when not given) so the trail has one shape. */
+export async function adminBlock(req: Request, res: Response): Promise<void> {
+  try {
+    const body = parseBody(moderationReasonDto, req, res)
+    if (body === null) return
+
+    const result = await service.blockMedia(req.params.publicId, body, req.user!.userId)
+    auditFromRequest(req, 'state_change', 'media', req.params.publicId, {
+      action: 'block',
+      reasonCode: body.reasonCode,
+      note: body.note ?? null,
+    })
+    res.json(result)
+  } catch (err) {
+    handleError(res, err, 'media.adminBlock')
+  }
+}
+
+export async function adminUnblock(req: Request, res: Response): Promise<void> {
+  try {
+    const body = parseBody(moderationReasonDto, req, res)
+    if (body === null) return
+
+    const result = await service.unblockMedia(req.params.publicId, body, req.user!.userId)
+    auditFromRequest(req, 'state_change', 'media', req.params.publicId, {
+      action: 'unblock',
+      reasonCode: body.reasonCode,
+      note: body.note ?? null,
+    })
+    res.json(result)
+  } catch (err) {
+    handleError(res, err, 'media.adminUnblock')
   }
 }

@@ -48,6 +48,11 @@ function report(overrides: Partial<ReportRow> = {}): ReportRow {
     frozenReason: null,
     frozenAt: null,
     purged: false,
+    hidden: false,
+    hiddenReasonCode: null,
+    hiddenNote: null,
+    hiddenAt: null,
+    hiddenBy: null,
     createdAt: new Date('2026-08-03T14:37:42Z'),
     ...overrides,
   }
@@ -307,5 +312,56 @@ describe('report media — M2 (decisions 128/129/134/136/138)', () => {
       expect(publicView).toMatchObject({ access: 'public', media: [{ publicId: MEDIA_ID }] })
       expect((publicView as any).media[0].mime).toBeUndefined()
     })
+  })
+})
+
+describe('report media under moderation (B2 — decision 162)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedTier.mockResolvedValue('low')
+    mockedRepository.findById.mockResolvedValue(report())
+    mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedOpenObject.mockResolvedValue(Buffer.from('plain-image'))
+  })
+
+  it('blocked media 404s for the OWNER too — a moderator took it down from the whole app plane', async () => {
+    mockedRepository.findAttachedMedia.mockResolvedValue(media({ status: 'blocked' }))
+    await expect(
+      service.getReportMediaVariant(7, MEDIA_ID, 'thumb', OWNER_BY_ACCOUNT)
+    ).rejects.toMatchObject({ statusCode: 404 })
+    await expect(
+      service.getReportMediaVariant(7, MEDIA_ID, 'blur', OWNER_BY_KEY)
+    ).rejects.toMatchObject({ statusCode: 404 })
+    expect(mockedOpenObject).not.toHaveBeenCalled()
+  })
+
+  it("a hidden report's media 404s for third parties, still streams for the owner and participants", async () => {
+    mockedRepository.findById.mockResolvedValue(report({ hidden: true, hiddenReasonCode: 'spam' }))
+    mockedRepository.findAttachedMedia.mockResolvedValue(media({ status: 'available' }))
+
+    await expect(
+      service.getReportMediaVariant(7, MEDIA_ID, 'normalized', STRANGER)
+    ).rejects.toMatchObject({ statusCode: 404 })
+
+    await expect(
+      service.getReportMediaVariant(7, MEDIA_ID, 'normalized', OWNER_BY_ACCOUNT)
+    ).resolves.toMatchObject({ mime: 'image/webp' })
+
+    mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+    await expect(
+      service.getReportMediaVariant(7, MEDIA_ID, 'normalized', STRANGER)
+    ).resolves.toMatchObject({ mime: 'image/webp' })
+  })
+
+  it('the owner and public media lists come from the available-only query (blocked excluded)', async () => {
+    mockedRepository.listAttachedMedia.mockResolvedValue([media({ status: 'available' })])
+    mockedRepository.getTimeline.mockResolvedValue([])
+    mockedRepository.findOffersWithNames.mockResolvedValue([])
+
+    await service.getReportView(7, OWNER_BY_ACCOUNT)
+    await service.getReportView(7, STRANGER)
+
+    expect(mockedRepository.listAttachedMedia).toHaveBeenCalledTimes(2)
+    expect(mockedRepository.findAttachedMediaWithStatus).not.toHaveBeenCalled()
   })
 })

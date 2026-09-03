@@ -41,6 +41,14 @@ const router = Router()
  *   get:
  *     summary: EXACT position — needs the report_exact_position grant on top of reports; every read audited (decision 159)
  *     tags: [Reports]
+ * /api/reports/{id}/hide:
+ *   post:
+ *     summary: Hides the report from the feed and from third parties — one human with reports UPDATE, catalog reason, audited (decisions 162/163/167)
+ *     tags: [Reports]
+ * /api/reports/{id}/unhide:
+ *   post:
+ *     summary: Reverts the hide under the same single-human rule, reason mandatory (decision 162)
+ *     tags: [Reports]
  */
 router.get('/', requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW), controller.search)
 router.get('/:id', requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW), controller.detail)
@@ -49,6 +57,13 @@ router.get(
   requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW),
   requirePrivilege(InterfaceKeys.REPORT_EXACT_POSITION, Privileges.VIEW),
   controller.exactPosition
+)
+// Moderation (B2) IS `reports` UPDATE (165) — no interface of its own.
+router.post('/:id/hide', requirePrivilege(InterfaceKeys.REPORTS, Privileges.UPDATE), controller.hide)
+router.post(
+  '/:id/unhide',
+  requirePrivilege(InterfaceKeys.REPORTS, Privileges.UPDATE),
+  controller.unhide
 )
 
 export default router

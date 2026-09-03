@@ -54,6 +54,11 @@ function row(overrides: Partial<ReportRow> = {}): ReportRow {
     frozenReason: null,
     frozenAt: null,
     purged: false,
+    hidden: false,
+    hiddenReasonCode: null,
+    hiddenNote: null,
+    hiddenAt: null,
+    hiddenBy: null,
     createdAt: new Date('2026-08-03T12:00:00Z'),
     ...overrides,
   }
