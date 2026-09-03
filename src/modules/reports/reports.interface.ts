@@ -6,6 +6,7 @@ export type { Category, Subject } from '@shared/taxonomy/taxonomy'
 import type { Category, Subject } from '@shared/taxonomy/taxonomy'
 import type { RiskTier } from '@shared/risk/risk-tier'
 import type { ModerationReason } from '@shared/moderation/moderation-reason'
+import type { StatCount } from '@shared/stats/k-anonymity'
 
 export type ReportStatus = 'open' | 'resolved'
 
@@ -294,4 +295,57 @@ export interface ReportExactPosition {
   reportId: number
   lat: number
   lng: number
+}
+
+/* ------------------------------------------------------------------ *
+ * Statistics — B4 of plano-moderacao-painel.md (decisions 164/165).
+ * Aggregates ONLY: no row id, no position, no identity ever appears in
+ * these shapes; every count is a StatCount (number | "<5", the k = 5
+ * floor of shared/stats/k-anonymity).
+ * ------------------------------------------------------------------ */
+
+export type StatsGranularity = 'day' | 'week' | 'month'
+
+/** Resolved bounds over tb_report.created_at: `from` inclusive; `to`
+ *  exclusive (date-only input -> next midnight UTC) or inclusive
+ *  (date-time input / the `now` default) — the B1 search rules. */
+export interface StatsRange {
+  from: Date
+  to: Date
+  toExclusive: boolean
+}
+
+/** Raw (unfloored) totals as the repository counts them. */
+export interface ReportStatsTotalsRow {
+  reports: number
+  open: number
+  resolved: number
+  anonymous: number
+  identified: number
+  frozen: number
+  hidden: number
+  /** status = 'resolved' AND expires_at reached — purged or not. */
+  expired: number
+  purged: number
+  /** At least one living tb_media attached, any status (B1's hasMedia). */
+  withMedia: number
+}
+
+export interface ReportStats {
+  range: { from: string; to: string; granularity: StatsGranularity }
+  totals: Record<keyof ReportStatsTotalsRow, StatCount>
+  /** period key: 'YYYY-MM-DD' | 'YYYY-Www' (ISO week) | 'YYYY-MM'; ascending; empty periods omitted. */
+  byPeriod: Array<{ period: string; reports: StatCount }>
+  /** category null = free-tag reports (tier = getRiskTier(null)). */
+  byCategory: Array<{ category: Category | null; tier: RiskTier; reports: StatCount }>
+  bySubject: Array<{ subject: Subject; reports: StatCount }>
+  byStatus: Array<{ status: ReportStatus; reports: StatCount }>
+  /** Summed from byCategory BEFORE flooring (164). */
+  byTier: Array<{ tier: RiskTier; reports: StatCount }>
+  moderation: {
+    /** Reports created in range that are currently hidden, by hidden_reason_code. */
+    hiddenByReason: Array<{ reasonCode: ModerationReason; reports: StatCount }>
+    /** Blocked media attached to reports created in range, by blocked_reason_code. */
+    blockedMediaByReason: Array<{ reasonCode: ModerationReason; media: StatCount }>
+  }
 }

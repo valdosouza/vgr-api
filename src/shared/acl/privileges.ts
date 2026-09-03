@@ -57,6 +57,10 @@ export const InterfaceKeys = {
    *  a case's EXACT position. The detail serves the tier-degraded grid
    *  (135); the exact point only leaves through this grant, audited. */
   REPORT_EXACT_POSITION: 'report_exact_position',
+  /** kind 'T' screen (decisions 164/165 — migration 040): aggregated
+   *  report statistics under the k = 5 floor (VIEW only; not audited —
+   *  aggregates are not evidence). */
+  REPORT_STATS: 'report_stats',
 } as const
 
 export type InterfaceKey = (typeof InterfaceKeys)[keyof typeof InterfaceKeys]

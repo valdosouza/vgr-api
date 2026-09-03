@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import * as service from '@modules/reports/reports-admin.service'
-import { reportSearchQueryDto } from '@modules/reports/reports-admin.dto'
+import * as statsService from '@modules/reports/reports-stats.service'
+import { reportSearchQueryDto, reportStatsQueryDto } from '@modules/reports/reports-admin.dto'
 import { handleError, parseBody, parseId, zodToFields } from '@shared/http/controller-utils'
 import { auditFromRequest } from '@shared/audit/admin-audit'
 import { ErrorCodes } from '@shared/errors/error-codes'
@@ -27,6 +28,29 @@ export async function search(req: Request, res: Response): Promise<void> {
     res.json(await service.searchReports(parsed.data))
   } catch (err) {
     handleError(res, err, 'reports-admin.search')
+  }
+}
+
+/**
+ * Statistics (B4 — decisions 164/165): aggregates under the k = 5 floor.
+ * Deliberately NOT audited — aggregates are not evidence (unlike the
+ * detail, 166). Range semantics (defaults, from <= to, 366 days) are the
+ * service's and surface as the same 422 envelope.
+ */
+export async function stats(req: Request, res: Response): Promise<void> {
+  try {
+    const parsed = reportStatsQueryDto.safeParse(req.query)
+    if (!parsed.success) {
+      res.status(422).json({
+        error: 'Validation failed',
+        code: ErrorCodes.VALIDATION_FAILED,
+        fields: zodToFields(parsed.error),
+      })
+      return
+    }
+    res.json(await statsService.getReportStats(parsed.data))
+  } catch (err) {
+    handleError(res, err, 'reports-admin.stats')
   }
 }
 

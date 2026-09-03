@@ -13,7 +13,7 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
 const queryBool = z.enum(['true', 'false']).transform((value) => value === 'true')
 
-const queryDate = z.string().refine(
+export const queryDate = z.string().refine(
   (value) => DATE_ONLY.test(value) || !Number.isNaN(Date.parse(value)),
   { message: 'Expected ISO date-time or YYYY-MM-DD', params: { code: FieldErrorCodes.INVALID_FORMAT } }
 )
@@ -35,6 +35,21 @@ export const reportSearchQueryDto = z.object({
 })
 
 export type ReportSearchQuery = z.infer<typeof reportSearchQueryDto>
+
+/**
+ * Statistics query (B4 — decision 164). Same date rules as the search;
+ * the RANGE semantics (defaults, from <= to, max 366 days) live in
+ * reports-stats.service because the `to` default is "now".
+ */
+export const STATS_GRANULARITIES = ['day', 'week', 'month'] as const
+
+export const reportStatsQueryDto = z.object({
+  from: queryDate.optional(),
+  to: queryDate.optional(),
+  granularity: z.enum(STATS_GRANULARITIES).default('day'),
+})
+
+export type ReportStatsQuery = z.infer<typeof reportStatsQueryDto>
 
 export function isDateOnly(value: string): boolean {
   return DATE_ONLY.test(value)

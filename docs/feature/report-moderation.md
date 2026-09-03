@@ -214,9 +214,135 @@ contracts, feed exclusion), `reports.lifecycle.spec` + `reports.media.spec`
 (app-plane visibility of hidden/blocked), `media-moderation.service.spec`,
 `media-moderation.routes.spec`, `media.repository.spec`.
 
+## B4 — statistics (decisions 164/165)
+
+Aggregated counters for the panel, **never a row**: no id, no position,
+no identity in any response (164/135/23) and **no geo aggregation at all
+in this phase** (164 — the heat map reopens with real volume). Files
+`reports-stats.{repository,service}.ts`, the `stats` controller action
+and the `/stats` route in `reports-admin.*`, DTO `reportStatsQueryDto` in
+`reports-admin.dto.ts`, the floor in `shared/stats/k-anonymity.ts`,
+migration `040_report_stats.sql`.
+
+### Interface (migration 040)
+
+`report_stats` — kind 'T', group "Operations", **VIEW only** (165), its
+own grant: the `reports` grant does NOT open it and vice versa. Bootstrap
+to de-facto admins (UPDATE on Users), pattern of 038.
+`InterfaceKeys.REPORT_STATS`.
+
+### The k = 5 floor — `shared/stats/k-anonymity.ts` (164)
+
+`floorCount(n): number | "<5"` — `0` stays `0` (an empty cell names
+nobody), `1..4` is served as the string `"<5"`, `>= 5` stays the number.
+It is the ONE place the floor exists; the service passes **every** count
+through it — totals, each grouping row, the moderation groups — and does
+so **after summing**: `byTier` is summed from the raw `byCategory` counts
+and only then floored, so two categories served as `"<5"` can still add
+up to a served tier (3 + 3 in `high` -> `byTier.high = 6`).
+
+### `GET /api/reports/stats` — `report_stats` VIEW, NOT audited
+
+Registered BEFORE `/:id` so the literal segment never parses as an id
+(`reports-stats.routes.spec` proves the detail handler never runs).
+Aggregates are not evidence, so no `tb_admin_audit` row is written
+(unlike the detail, 166).
+
+Query (422 with per-field codes on bad input, decision 83):
+
+- `from`, `to` — the B1 `queryDate` rules: ISO date-time or
+  `YYYY-MM-DD` (`INVALID_FORMAT` otherwise). `from` inclusive; a
+  date-only `to` covers the whole day (bound = next midnight UTC, `<`);
+  a date-time `to` is inclusive (`<=`). Defaults: `to` = now, `from` =
+  `to` - 30 days. `from` after `to` -> 422 `INVALID_VALUE` on `from`
+  (compared on the INPUT instants, so `from=2026-09-01&to=2026-09-01` is
+  the whole day and `from=2026-09-02&to=2026-09-01` fails). Range longer
+  than 366 days -> 422 `TOO_LONG` on `to` with `params.max = "366"`.
+  These range checks live in the service (`resolveStatsRange`) because
+  the `to` default is "now"; they surface as the same envelope.
+- `granularity` — `day | week | month` (`INVALID_OPTION`), default `day`.
+
+The range applies to `tb_report.created_at`; living rows only
+(`deleted='N'`); **purged rows INCLUDED** — they are the statistical
+skeleton the purge keeps on purpose (25/131).
+
+Definitions (`reports-stats.repository.countTotals`):
+
+| Total | Definition |
+|---|---|
+| `reports` | every living report created in range |
+| `open` / `resolved` | by `status` |
+| `anonymous` / `identified` | `anonymous = 'S'` / `'N'` |
+| `frozen` | `frozen = 'S'` (141) |
+| `hidden` | `hidden = 'S'` (162) |
+| `expired` | `status='resolved' AND expires_at IS NOT NULL AND expires_at <= NOW()` — purged or not |
+| `purged` | `purged = 'S'` |
+| `withMedia` | at least one living `tb_media` attached through `tb_report_media`, any status (B1's `hasMedia`) |
+
+Period key: `DATE_FORMAT(created_at, '%Y-%m-%d')` for `day`,
+`DATE_FORMAT(created_at, '%Y-%m')` for `month`, and for `week` the
+**ISO week** `YEARWEEK(created_at, 3)` rendered as `YYYY-Www`
+(Monday-first, week 1 holds January 4th — the key that never splits a
+week across two years and that the panel can compute locally). Periods
+are ascending; empty periods are omitted.
+
+Moderation groups: `hiddenByReason` = reports created in range that are
+**currently** hidden, by `hidden_reason_code`; `blockedMediaByReason` =
+living media with `status='blocked'` attached to reports created in
+range, by `blocked_reason_code`. Notes and actors never leave.
+
+```
+200 {
+  range: { from: ISO, to: ISO, granularity },      // the EFFECTIVE bounds (to = exclusive next midnight when date-only)
+  totals: { reports, open, resolved, anonymous, identified, frozen, hidden, expired, purged, withMedia },   // each number | "<5"
+  byPeriod:   [{ period: 'YYYY-MM-DD' | 'YYYY-Www' | 'YYYY-MM', reports }],
+  byCategory: [{ category: string | null, tier, reports }],        // null = free-tag reports, tier = getRiskTier(null)
+  bySubject:  [{ subject, reports }],
+  byStatus:   [{ status, reports }],
+  byTier:     [{ tier: 'low'|'medium'|'high', reports }],          // always the three tiers, summed BEFORE flooring
+  moderation: {
+    hiddenByReason:       [{ reasonCode, reports }],
+    blockedMediaByReason: [{ reasonCode, media }]
+  }
+}
+```
+
+Example — `GET /api/reports/stats?from=2026-08-01&to=2026-08-31&granularity=week`:
+
+```json
+{
+  "range": { "from": "2026-08-01T00:00:00.000Z", "to": "2026-09-01T00:00:00.000Z", "granularity": "week" },
+  "totals": { "reports": 12, "open": 5, "resolved": 7, "anonymous": "<5", "identified": 8,
+              "frozen": "<5", "hidden": 0, "expired": "<5", "purged": "<5", "withMedia": 6 },
+  "byPeriod": [{ "period": "2026-W31", "reports": "<5" }, { "period": "2026-W32", "reports": 8 }],
+  "byCategory": [{ "category": "missing", "tier": "high", "reports": "<5" },
+                 { "category": "kidnapping", "tier": "high", "reports": "<5" },
+                 { "category": "assault", "tier": "low", "reports": 6 }],
+  "bySubject": [{ "subject": "adult", "reports": 8 }, { "subject": "child", "reports": "<5" }],
+  "byStatus": [{ "status": "open", "reports": 5 }, { "status": "resolved", "reports": 7 }],
+  "byTier": [{ "tier": "low", "reports": 6 }, { "tier": "medium", "reports": 0 }, { "tier": "high", "reports": 6 }],
+  "moderation": { "hiddenByReason": [], "blockedMediaByReason": [{ "reasonCode": "personal_data", "media": "<5" }] }
+}
+```
+
+### Tests (B4)
+
+`shared/stats/__tests__/k-anonymity.spec` (0 / 1..4 / 5+ / invalid
+input), `reports-stats.service.spec` (defaults, date-only vs date-time
+bounds, same-day range, `from > to` and `> 366 days` 422 field codes,
+exactly 366 accepted, floor on totals, byTier summed-then-floored,
+free-tag tier, every grouping floored, no id/position/identity key in
+the serialized response), `reports-stats.repository.spec` (period key
+per granularity, `<` vs `<=`, parameters, totals definitions, GROUP BY
+per grouping, moderation joins never select note/actor/publicId),
+`reports-stats.routes.spec` (own grant vs `reports` grant, 422 codes,
+service 422 pass-through, NOT audited, `/stats` not swallowed by `/:id`,
+401).
+
 ### Status
 
 - B1 — API side DONE 2026-09-02. 64 suites / 478 tests green; `tsc` clean.
 - B2 — API side DONE 2026-09-02. 72 suites / 563 tests green; `tsc` clean.
-- B4 (stats), B3 (queue), B5 (audit trail screen) — pending, each behind
-  its own "pode seguir" (38).
+- B4 — API side DONE 2026-09-02. 76 suites / 604 tests green; `tsc` clean.
+- B3 (queue), B5 (audit trail screen) — pending, each behind its own
+  "pode seguir" (38).

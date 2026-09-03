@@ -33,6 +33,14 @@ const router = Router()
  *       - { in: query, name: hasMedia, schema: { type: boolean } }
  *       - { in: query, name: from, schema: { type: string }, description: ISO date-time or YYYY-MM-DD (inclusive) }
  *       - { in: query, name: to, schema: { type: string }, description: ISO date-time (inclusive) or YYYY-MM-DD (whole day) }
+ * /api/reports/stats:
+ *   get:
+ *     summary: Aggregated statistics under the k = 5 floor — own report_stats grant, NOT audited (decisions 164/165)
+ *     tags: [Reports]
+ *     parameters:
+ *       - { in: query, name: from, schema: { type: string }, description: ISO date-time or YYYY-MM-DD (inclusive); default to - 30 days }
+ *       - { in: query, name: to, schema: { type: string }, description: ISO date-time (inclusive) or YYYY-MM-DD (whole day); default now }
+ *       - { in: query, name: granularity, schema: { type: string, enum: [day, week, month], default: day } }
  * /api/reports/{id}:
  *   get:
  *     summary: Case detail for the panel — degraded position, identity only for identified actors; every read audited (decisions 159/160/166)
@@ -51,7 +59,10 @@ const router = Router()
  *     tags: [Reports]
  */
 router.get('/', requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW), controller.search)
-router.get('/:id', requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW), controller.detail)
+// Statistics (B4, 164/165) — its OWN interface, registered BEFORE /:id so
+// the literal segment never parses as an id; not audited.
+router.get('/stats', requirePrivilege(InterfaceKeys.REPORT_STATS, Privileges.VIEW), controller.stats)
+router.get('/:id',requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW), controller.detail)
 router.get(
   '/:id/position',
   requirePrivilege(InterfaceKeys.REPORTS, Privileges.VIEW),
