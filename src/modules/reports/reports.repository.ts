@@ -823,7 +823,12 @@ export async function findAccountDisplayName(accountId: number): Promise<string 
 }
 
 /** Offers for the PANEL detail, with the helper's opaque id + display
- *  name (masking of anonymous helpers happens in the service, 160). */
+ *  name (masking of anonymous helpers happens in the service, 160).
+ *  ratingScore (RT3, decision 186) mirrors findOffersWithNames' LEFT JOIN
+ *  above — a completely separate code path from the owner's (confirmed
+ *  during RT1), but the same read-only fact: the living score, nothing
+ *  about who rated (there is no rater identity to leak; the panel never
+ *  rates, only observes what RT1's write path already recorded). */
 export async function findOffersForPanel(
   reportId: number
 ): Promise<
@@ -834,14 +839,17 @@ export async function findOffersForPanel(
     helperAccountId: number | null
     helperDisplayName: string | null
     createdAt: Date
+    ratingScore: number | null
   }>
 > {
   const [rows] = await pool.query<any[]>(
     `SELECT o.id, o.help_type AS helpType, o.anonymous,
             o.helper_account_id AS helperAccountId,
-            a.display_name AS helperDisplayName, o.created_at AS createdAt
+            a.display_name AS helperDisplayName, o.created_at AS createdAt,
+            r.score AS ratingScore
      FROM tb_help_offer o
      LEFT JOIN tb_user_account a ON a.id = o.helper_account_id
+     LEFT JOIN tb_helper_rating r ON r.tb_help_offer_id = o.id AND r.deleted = 'N'
      WHERE o.tb_report_id = ? AND o.deleted = 'N'
      ORDER BY o.created_at, o.id`,
     [reportId]
@@ -853,5 +861,6 @@ export async function findOffersForPanel(
     helperAccountId: row.helperAccountId ?? null,
     helperDisplayName: row.helperDisplayName ?? null,
     createdAt: row.createdAt,
+    ratingScore: row.ratingScore == null ? null : Number(row.ratingScore),
   }))
 }

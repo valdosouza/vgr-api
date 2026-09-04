@@ -204,6 +204,9 @@ export async function getReportPanelDetail(reportId: number): Promise<ReportPane
           ? null
           : { accountId: offer.helperAccountId, displayName: offer.helperDisplayName ?? '' },
       createdAt: offer.createdAt.toISOString(),
+      // RT3, decision 186: bare score, null until rated — no `ratable`
+      // (the panel never rates) and no rater identity (there is none).
+      ratingScore: offer.ratingScore,
     })),
   }
 }

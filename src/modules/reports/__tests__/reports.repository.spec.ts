@@ -369,3 +369,71 @@ describe('reports.repository — findOffersWithNames carries the rating (RT1, de
     ])
   })
 })
+
+/** RT3, decision 186: the panel's own offers query (a completely separate
+ *  code path from the owner's findOffersWithNames above, confirmed during
+ *  RT1) picks up the same LEFT JOIN so the admin case detail can show the
+ *  score — read-only, no new grant, no rater identity ever selected. */
+describe('reports.repository — findOffersForPanel carries the rating score (RT3, decision 186)', () => {
+  beforeEach(() => jest.resetAllMocks())
+
+  it('LEFT JOINs the living rating of each offer and projects ratingScore, selecting no rater identity', async () => {
+    mockedPool.query.mockResolvedValueOnce([
+      [
+        {
+          id: 1,
+          helpType: 'share',
+          anonymous: 'S',
+          helperAccountId: 8,
+          helperDisplayName: 'Ana',
+          createdAt: new Date('2026-08-03T15:00:00Z'),
+          ratingScore: 5,
+        },
+        {
+          id: 2,
+          helpType: 'share',
+          anonymous: 'N',
+          helperAccountId: null,
+          helperDisplayName: null,
+          createdAt: new Date('2026-08-03T15:01:00Z'),
+          ratingScore: null,
+        },
+      ],
+      undefined,
+    ] as any)
+
+    const rows = await repository.findOffersForPanel(7)
+
+    const [sql, params] = mockedPool.query.mock.calls[0] as unknown as [string, unknown[]]
+    const flat = sql.replace(/\s+/g, ' ')
+    expect(flat).toMatch(
+      /LEFT JOIN tb_helper_rating \w+ ON \w+\.tb_help_offer_id = o\.id AND \w+\.deleted = 'N'/
+    )
+    expect(flat).toContain('r.score AS ratingScore')
+    // Read-only twin of the owner query — no client_key, no rater id: the
+    // panel never rates and there is no rater identity to leak (186).
+    expect(flat).not.toContain('client_key')
+    expect(flat).not.toContain('rater')
+    expect(params).toEqual([7])
+    expect(rows).toEqual([
+      {
+        id: 1,
+        helpType: 'share',
+        anonymous: true,
+        helperAccountId: 8,
+        helperDisplayName: 'Ana',
+        createdAt: new Date('2026-08-03T15:00:00Z'),
+        ratingScore: 5,
+      },
+      {
+        id: 2,
+        helpType: 'share',
+        anonymous: false,
+        helperAccountId: null,
+        helperDisplayName: null,
+        createdAt: new Date('2026-08-03T15:01:00Z'),
+        ratingScore: null,
+      },
+    ])
+  })
+})

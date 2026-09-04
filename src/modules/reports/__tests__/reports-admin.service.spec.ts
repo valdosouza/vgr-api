@@ -203,8 +203,8 @@ describe('reports-admin.service — detail (decisions 159/160/166)', () => {
       { publicId: 'aaaaaaaa-0000-4000-8000-000000000002', mime: 'image/webp', width: 10, height: 10, status: 'blocked', blockedReasonCode: null, blockedNote: null, blockedAt: null },
     ])
     mockedRepository.findOffersForPanel.mockResolvedValue([
-      { id: 1, helpType: 'share', anonymous: true, helperAccountId: 99, helperDisplayName: 'Hidden', createdAt: new Date('2026-08-04T00:00:00Z') },
-      { id: 2, helpType: 'relay_information', anonymous: false, helperAccountId: 100, helperDisplayName: 'Bruno', createdAt: new Date('2026-08-05T00:00:00Z') },
+      { id: 1, helpType: 'share', anonymous: true, helperAccountId: 99, helperDisplayName: 'Hidden', createdAt: new Date('2026-08-04T00:00:00Z'), ratingScore: null },
+      { id: 2, helpType: 'relay_information', anonymous: false, helperAccountId: 100, helperDisplayName: 'Bruno', createdAt: new Date('2026-08-05T00:00:00Z'), ratingScore: 4 },
     ])
     mockedRepository.findAccountDisplayName.mockResolvedValue('Ana Reporter')
   })
@@ -285,17 +285,35 @@ describe('reports-admin.service — detail (decisions 159/160/166)', () => {
     const detail = await service.getReportPanelDetail(7)
 
     expect(detail.offers).toEqual([
-      { helpOfferId: 1, helpType: 'share', anonymous: true, helper: null, createdAt: '2026-08-04T00:00:00.000Z' },
+      { helpOfferId: 1, helpType: 'share', anonymous: true, helper: null, createdAt: '2026-08-04T00:00:00.000Z', ratingScore: null },
       {
         helpOfferId: 2,
         helpType: 'relay_information',
         anonymous: false,
         helper: { accountId: 100, displayName: 'Bruno' },
         createdAt: '2026-08-05T00:00:00.000Z',
+        ratingScore: 4,
       },
     ])
     expect(JSON.stringify(detail.offers)).not.toContain('Hidden')
     expect(JSON.stringify(detail.offers)).not.toContain('99')
+  })
+
+  /** RT3, decision 186: the panel observes the score already written by
+   *  RT1 through the app plane — no rate write path here, and none of the
+   *  score's provenance (clientKey, rater identity — there is none to
+   *  leak) rides along; only the bare number or null. */
+  it('offers: rating score is a bare number/null — an offer with a rating shows it, one without shows null (decision 186)', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+
+    const detail = await service.getReportPanelDetail(7)
+
+    expect(detail.offers[0].ratingScore).toBeNull()
+    expect(detail.offers[1].ratingScore).toBe(4)
+    const serialized = JSON.stringify(detail.offers)
+    expect(serialized).not.toContain('client_key')
+    expect(serialized).not.toContain('clientKey')
+    expect(serialized).not.toContain('ratable')
   })
 
   it('purged case returns the statistical skeleton only (decisions 25/131)', async () => {

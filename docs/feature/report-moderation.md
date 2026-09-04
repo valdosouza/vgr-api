@@ -86,7 +86,7 @@ ReportPanelDetail {
   detailFields: object | null,
   timeline: [{ eventType, payload, createdAt }],
   media: [{ publicId, mime, width, height, status }],                       // every living tb_media row incl. blocked/pending (M3)
-  offers: [{ helpOfferId, helpType, anonymous, helper: {accountId, displayName}|null, createdAt }]
+  offers: [{ helpOfferId, helpType, anonymous, helper: {accountId, displayName}|null, createdAt, ratingScore: number|null }]
 }
 ```
 
@@ -94,6 +94,17 @@ Identified actors are NOT tier-degraded here (decision 60 — the panel is
 the platform; 41 protects against the reporter's correlation). The
 media list carries publicIds only: the image itself is still served by
 `/api/media/:publicId/:variant` under `media_evidence` (130).
+
+`offers[].ratingScore` (RT3, decision 186): the panel observes the score
+of any offer already rated by its report owner through the app plane
+(`rating.md`, RT1) — `null` until rated. Read-only, under the SAME
+`reports` VIEW grant as the rest of this endpoint: no new capability, no
+new migration, no new audit event, and no aggregate-by-helper screen
+(explicitly excluded by 186). Unlike the owner's own view
+(`OfferRatingView` in `reports.md`), the panel gets the bare score only —
+no `ratable` flag (the panel never rates) and nothing about who rated
+(there is no rater identity to leak; `clientKey` never leaves the app
+plane's write path).
 
 ### `GET /api/reports/:id/position` — stacked guards, audited `read` / `report_position` / id (159)
 

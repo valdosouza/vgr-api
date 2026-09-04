@@ -322,6 +322,10 @@ export interface PanelOfferView {
   anonymous: boolean
   helper: PanelActorRef | null
   createdAt: string
+  /** Rating facet (RT3, decision 186) — the score only; the panel never
+   *  rates, so no `ratable` flag and no rater identity (there is none to
+   *  leak — clientKey lives on the app plane's write path, RT1). */
+  ratingScore: number | null
 }
 
 export interface ReportPanelDetail {
