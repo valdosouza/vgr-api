@@ -10,6 +10,12 @@ jest.mock('@modules/panic/responder-pool.repository')
 
 const mockedRepository = repository as jest.Mocked<typeof repository>
 
+// Plane fix note (PP1 of plano-panico.md): the service's signature is
+// unchanged — it always took an id and stored it as-is. What changed is
+// WHICH id the caller (now responder-pool.controller.create, on the app
+// plane) passes in: req.appAccountId (tb_user_account.id), never
+// req.user.userId (an admin's tb_user.id). Covered by
+// responder-pool-app.routes.spec.ts at the HTTP layer.
 describe('responder-pool.service', () => {
   beforeEach(() => {
     jest.resetAllMocks()

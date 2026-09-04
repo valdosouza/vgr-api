@@ -16,7 +16,11 @@ export async function resolveResponderRequest(id: number, approved: boolean, res
   await repository.resolveMembership(id, approved, resolvedBy)
 }
 
-/** Consumed by PanicAlert routing (task 28) — never resolves to zero recipients on its own (decision 65 is enforced there). */
+/** Consumed by PanicAlert routing (panic-alert.service.triggerAlert, PP1
+ *  of plano-panico.md) — the caller snapshots this list into
+ *  tb_panic_alert_recipient at trigger time; an empty list is never
+ *  refused HERE (decision 65's "never fail for a missing recipient" is
+ *  enforced by the caller, not by this read). */
 export async function findActiveResponders(): Promise<ResponderPoolMembershipRow[]> {
   return repository.findActiveMembers()
 }

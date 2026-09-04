@@ -118,13 +118,28 @@
 - [x] Should carry `offers[].rating { score, ratable }` on the OWNER view only — participant, public and summary views carry no rating data (decisions 181/183/185)
 
 **PanicAlert**
-> **Amended, 2026-08-22**: só o pré-requisito existe hoje —
-> `src/modules/panic/responder-pool.*` (quem é respondedor autorizado, ver
-> pendência 3 no `VGR-RESUMO.md` §6). O `PanicAlert`/`trigger()` propriamente
-> dito (decisões 51/62–65) é frente ainda não aberta; cenários abaixo são o
-> desenho original para essa parte pendente.
-- [ ] Should reject trigger() when recipients resolves to an empty set even after defaulting to the responder pool
-- [ ] Should accept trigger() with only a trusted contact configured, no pool membership required
+> **Amended, 2026-09-04**: implemented (PP1, decisions 190-199) in
+> `src/modules/panic/panic-alert.*` (`docs/feature/panic.md`) — replaces
+> the 2026-08-22 "front not open yet" note. `trigger()` is REVISED:
+> decision 65's "never blocked waiting on configuration" is read as
+> binding, so an empty recipient set is NEVER rejected — the alert is
+> created regardless, with zero recipient rows if that is what the pool
+> happens to be at that moment. The trusted-contact recipient (64) is OUT
+> of this round (193) — no union type, no scenario for it exists in code
+> yet. Scenarios live in `panic-alert.service.spec.ts`,
+> `panic-alert.routes.spec.ts`, `panic-alert.repository.spec.ts`.
+- [x] Should CREATE the alert (never reject) when the responder pool snapshot is empty — decision 65 revises the original "reject on empty recipients" design (`panic-alert.service.spec` — "creates the alert with ZERO recipients when the responder pool is empty")
+- [ ] Should accept trigger() with only a trusted contact configured, no pool membership required — OUT of scope this round (decision 193); registered as a future scenario, not built
+- [x] Should snapshot the CURRENTLY active responder pool as recipients at trigger time, for both an identified and an anonymous caller (`panic-alert.service.spec`)
+- [x] Should answer the SAME alert (200, `recipientCount` re-derived) on a clientKey replay, even if the pool changed since (decisions 137/191)
+- [x] Should refuse a second trigger with 409 `PANIC_ALERT_ACTIVE` while an IDENTIFIED caller's previous alert is still unresolved, and allow a new one once it resolves (decision 198)
+- [x] Should NEVER cooldown-check an ANONYMOUS caller across requests — documented gap, not an oversight (decision 198; `findActiveAlertByAccount` is asserted never called for `accountId === null`)
+- [x] Should assert the `panic.dispatch` capability before any INSERT — 451 and no write when blocked (decision 51)
+- [x] Should leave the accountability entry `panic_alert.trigger` for the ANONYMOUS triggerer only, with the alert id and never the position (decision 23, pattern of `help_offer.submit`)
+- [x] Should serve a responder's inbox with `distanceKm` rounded via `DISTANCE_STEP_BY_TIER.high`, NEVER the raw lat/lng of the alert (decision 195)
+- [x] Should list only alerts where the caller is a SNAPSHOTTED recipient, cursor-paged by `id > after`, resolved alerts included and flagged (decision 192)
+- [x] Should let ONLY the triggerer resolve — account match or `x-client-key`; a responder who answered, or an admin, gets the SAME 404 a missing alert gets (decision 197)
+- [x] Should reject a second resolve with 409 `PANIC_ALERT_ALREADY_RESOLVED` (decision 197)
 
 **ChatThread**
 > **Amended, 2026-09-03 (C1 — decisões 168–177)**: implementado em
@@ -239,7 +254,7 @@
 - [ ] Should exclude a denied or revoked membership from the active members list
 
 **PanicAlertRepository / ChatThreadRepository / PaymentIntentRepository**
-- [ ] Should persist a PanicAlert with its resolved recipient list intact
+- [x] Should persist a PanicAlert with its resolved recipient list intact (amended 2026-09-04: `insertAlert` then `insertRecipients` — a bulk insert of the trigger-time pool snapshot, empty array is a no-op, never an error — `panic-alert.repository.spec`, `panic-alert.service.spec`)
 - [x] Should find-or-create exactly one ChatThread per (reportId, helperId) pair, never duplicating on repeated calls (amended 2026-09-03: helperId = helper ACCOUNT, 169; UNIQUE `(tb_report_id, helper_account_id)` + `insertThreadWithParticipants` returns null on the race — `chat.repository.spec`, `chat.service.spec`)
 - [ ] Should persist a PaymentIntent's mode and confirmation state accurately
 
@@ -277,10 +292,13 @@
 - [ ] Should execute the OTP variant → code verified against a non-expired, unused record → JWT issued
 
 **TriggerPanicAlert → PanicAlertRepository**
-> **Amended, 2026-08-22**: mesmo estado de `PanicAlert` acima — só o
-> responder-pool (pré-requisito) existe; este use case ainda não tem código.
-- [ ] Should execute TriggerPanicAlert → recipients resolved (config or default pool) → PanicAlertTriggered emitted → persisted
-- [ ] Should execute end-to-end for a cold trigger (no prior configuration) and still resolve to the responder pool
+> **Amended, 2026-09-04**: implemented (PP1, decisions 190-199) — see the
+> `PanicAlert` note above. `PanicAlertTriggered` has no event bus (no
+> consumer needs one at MVP scope, decision 199/PP2-4 pending): the
+> trigger-time snapshot IS the persisted fact `GET /app-panic/alerts`
+> reads back.
+- [x] Should execute TriggerPanicAlert → recipients resolved from the CURRENT active pool (no `config` union this round, 193) → persisted as `tb_panic_alert` + `tb_panic_alert_recipient` (`panic-alert.service.spec`, `panic-alert.repository.spec`)
+- [x] Should execute end-to-end for a cold trigger (no prior configuration, no account) and still resolve to the responder pool, snapshotted at trigger time (`panic-alert.routes.spec` — "201s for an ANONYMOUS caller")
 
 **ProcessRewardPayment → PaymentIntentRepository**
 > **Amended, 2026-08-22**: mesma observação do `PaymentIntent` acima —
@@ -378,18 +396,29 @@
   - When: that caller calls `GET /api/reports/:id`
   - Then: response contains only the closure status, no timeline/ratings (decision 50)
 
-- [ ] **Should let a user request Authorized Responder status and an admin approve it** (amendment, task 27 — same gap as noted in section 2.2)
-  - Given: an authenticated user with no existing ResponderPoolMembership
-  - When: `POST /api/panic/responder-pool` is called by that user, then `PUT /api/panic/responder-pool/:id/resolve` with `{ approved: true }` is called by an admin
-  - Then: the first response is 201 with status=pending; the second is 200 and the membership no longer appears in the admin's pending list
+- [x] **Should let a user request Authorized Responder status and an admin approve it** (amendment, task 27 — same gap as noted in section 2.2; amended 2026-09-04 — the request endpoint moved planes, see below)
+  - Given: an app account with no existing ResponderPoolMembership
+  - When: `POST /app-panic/responder-pool` is called by that account (`appAuthMiddleware`), then `PUT /api/panic/responder-pool/:id/resolve` with `{ approved: true }` is called by an admin
+  - Then: the first response is 201 with status=pending, `req.appAccountId` is what gets stored; the second is 200 and the membership no longer appears in the admin's pending list (`responder-pool-app.routes.spec`, `responder-pool.controller.spec`)
 
-> **Amended, 2026-08-22**: `POST /api/panic/trigger` não existe — só o
-> responder-pool (pré-requisito) está implementado.
+> **Amended, 2026-09-04 (correction, not decision 190-199 itself)**:
+> `POST /api/panic/responder-pool` was ADMIN-only (`/api`,
+> `authMiddleware`) and unreachable by a real mobile user — it read
+> `req.user!.userId`, an admin's id, where the pool membership's
+> `user_id` is meant to hold an app account id. Moved to `POST
+> /app-panic/responder-pool` under `appAuthMiddleware` (required — an
+> identified-account-only action, decision 190/51). `GET`/`PUT
+> :id/resolve` stay exactly where they were, admin-gated, under `/api`.
 
-- [ ] **Should trigger a panic alert and resolve to the responder pool when unconfigured**
-  - Given: a user with no PanicAlert configuration saved
-  - When: `POST /api/panic/trigger` is called
-  - Then: response is 201; PanicAlertTriggered is emitted with the active responder pool as recipients (decision 65)
+> **Amended, 2026-09-04**: implemented (PP1, decisions 190-199) as
+> `POST /app-panic/alert` — the endpoint moved planes from the original
+> `/api/panic/trigger` sketch (app plane, `optionalAppAuth`, never
+> `/api`, same posture as `/app-reports`/`/app-chat`).
+
+- [x] **Should trigger a panic alert and resolve to the responder pool when unconfigured**
+  - Given: a user with no prior responder-pool configuration (identified or fully anonymous)
+  - When: `POST /app-panic/alert` is called with `{ clientKey, position: { lat, lng } }`
+  - Then: response is 201 `{ alertId, createdAt, recipientCount }`; the current active responder pool is snapshotted into `tb_panic_alert_recipient` as recipients (decision 65) — `panic-alert.routes.spec`, `panic-alert.service.spec`
 
 > **Amended, 2026-09-03 (C1)**: chat mascarado implementado no plano do app
 > (`/app-chat/...`, nunca `/api/chat/...` — emenda E1); `chat.routes.spec.ts`.
@@ -412,7 +441,7 @@
 - [ ] Should return 422 when a non-registered (anonymous) Reporter attempts `POST /api/rewards` to offer a Reward (decision 33)
 - [ ] Should return 409 when attempting to revoke() a Reward after a qualifying HelpOffer already exists (decision 30)
 - [ ] Should return 422 when a PaymentIntent with mode=peer_to_peer is requested for a high-tier Report (decision 58)
-- [ ] Should return 403 when a non-admin caller attempts any `/api/risk-config/*`, `/api/category-forms/*`, `/api/dual-control-access/*`, `/api/monetization-config/*` (amendment, task 32), or admin-only `/api/panic/responder-pool/*` endpoint (list/resolve — request stays open to any authenticated Role)
+- [ ] Should return 403 when a non-admin caller attempts any `/api/risk-config/*`, `/api/category-forms/*`, `/api/dual-control-access/*`, `/api/monetization-config/*` (amendment, task 32), or admin-only `/api/panic/responder-pool/*` endpoint (amended 2026-09-04: list/resolve ONLY — the request endpoint moved off `/api` entirely to `POST /app-panic/responder-pool`, `appAuthMiddleware`-gated, see the ResponderPoolMembership plane-fix note above; a plain 404, not 403, is what `POST /api/panic/responder-pool` answers now — `responder-pool.controller.spec`)
 - [ ] Should return 409 when a second approval attempt on `/api/dual-control-access/:id` reuses an approverId already recorded on that request
 
 ### 3.3 Security Scenarios

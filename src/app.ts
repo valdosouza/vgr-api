@@ -18,6 +18,8 @@ import helpOfferRoutes from '@modules/help-offers/help-offers.routes'
 import rewardRoutes from '@modules/reward/reward.routes'
 import chatRoutes from '@modules/messaging/chat.routes'
 import ratingRoutes, { reportRatingRoutes } from '@modules/ratings/helper-rating.routes'
+import responderPoolAppRoutes from '@modules/panic/responder-pool-app.routes'
+import panicAlertRoutes from '@modules/panic/panic-alert.routes'
 import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -141,6 +143,21 @@ app.use('/app-chat', rateLimitMiddleware, chatRoutes)
 // aggregate only; the route itself demands the app token (never
 // optional): an anonymous helper has no reputation to read.
 app.use('/app-ratings', rateLimitMiddleware, ratingRoutes)
+
+// Authorized Responder pool request (PP1 of plano-panico.md, decisions
+// 51/190) — plane fix: an app account requesting to become a responder,
+// moved off the admin-only /api plane (see responder-pool.routes.ts's
+// header comment for the bug this corrects). Mounted BEFORE the more
+// general /app-panic prefix below (specific before general, the
+// /app-reports/:id/offers precedent).
+app.use('/app-panic/responder-pool', rateLimitMiddleware, responderPoolAppRoutes)
+
+// Panic alert (PP1 — decisions 51, 65, 191-198): a single-shot alert
+// (191) to the Authorized Responder pool. Trigger is optionalAppAuth (a
+// cold, anonymous witness can fire it, 65/196); the alerts inbox demands
+// the app token (only an identified responder has anything to see);
+// resolve mirrors trigger's optional ownership (197).
+app.use('/app-panic', rateLimitMiddleware, panicAlertRoutes)
 
 // JWT auth on all /api routes (public routes, e.g. listing anonymous
 // reports, go BEFORE this line once they exist — scope-refinement will

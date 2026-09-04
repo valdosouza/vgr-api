@@ -22,7 +22,13 @@ function tokenFor(userId: number, role: string): string {
   return jwt.sign({ userId, role, sv: 1 }, process.env.JWT_SECRET ?? 'test-secret', { audience: 'admin' })
 }
 
-describe('POST /api/panic/responder-pool', () => {
+// Plane fix (PP1 of plano-panico.md, correction applied alongside
+// decisions 190-199): POST used to live here, admin-only, and read
+// req.user!.userId — an ADMIN's tb_user.id stored where an APP account id
+// (tb_user_account.id) belongs. It moved to /app-panic/responder-pool,
+// guarded by appAuthMiddleware (responder-pool-app.routes.spec.ts) — this
+// admin router keeps ONLY GET (list) and PUT :id/resolve, unchanged.
+describe('POST /api/panic/responder-pool (removed — moved to /app-panic/responder-pool)', () => {
   beforeAll(() => {
     process.env.JWT_SECRET = 'test-secret'
   })
@@ -32,46 +38,13 @@ describe('POST /api/panic/responder-pool', () => {
     mockedAcl.userHasPrivilege.mockImplementation(async (userId: number) => userId !== 42)
   })
 
-  it('returns 201 with the created pending membership for any authenticated Role', async () => {
-    mockedService.requestResponderAuthorization.mockResolvedValue({
-      id: 1,
-      userId: 42,
-      status: 'pending',
-      criteriaNotes: null,
-      requestedAt: new Date('2026-01-01'),
-      resolvedAt: null,
-      resolvedBy: null,
-    })
-
+  it('no longer answers under the admin-only /api plane, even with a valid admin token', async () => {
     const res = await request(app)
       .post('/api/panic/responder-pool')
-      .set('Authorization', `Bearer ${tokenFor(42, 'reporter')}`)
+      .set('Authorization', `Bearer ${tokenFor(7, 'admin')}`)
 
-    expect(res.status).toBe(201)
-    expect(res.body.ok).toBe(true)
-    expect(res.body.data.status).toBe('pending')
-    expect(mockedService.requestResponderAuthorization).toHaveBeenCalledWith(42, undefined)
-  })
-
-  it('forwards free-text criteriaNotes when provided (decision 52 still open, no validation rules yet)', async () => {
-    mockedService.requestResponderAuthorization.mockResolvedValue({
-      id: 1,
-      userId: 42,
-      status: 'pending',
-      criteriaNotes: 'Volunteer firefighter, 5 years',
-      requestedAt: new Date('2026-01-01'),
-      resolvedAt: null,
-      resolvedBy: null,
-    })
-
-    const res = await request(app)
-      .post('/api/panic/responder-pool')
-      .set('Authorization', `Bearer ${tokenFor(42, 'reporter')}`)
-      .send({ criteriaNotes: 'Volunteer firefighter, 5 years' })
-
-    expect(res.status).toBe(201)
-    expect(res.body.data.criteriaNotes).toBe('Volunteer firefighter, 5 years')
-    expect(mockedService.requestResponderAuthorization).toHaveBeenCalledWith(42, 'Volunteer firefighter, 5 years')
+    expect(res.status).toBe(404)
+    expect(mockedService.requestResponderAuthorization).not.toHaveBeenCalled()
   })
 })
 

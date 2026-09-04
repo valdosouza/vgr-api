@@ -43,6 +43,13 @@ export const ErrorCodes = {
   /** Helper rating (decision 183): one rating per help offer, immutable —
    *  a second attempt (another clientKey) is refused. HTTP 409. */
   ALREADY_RATED: 'ALREADY_RATED',
+  /** Panic alert cooldown (decision 198): the caller already has an
+   *  unresolved alert — simple anti-abuse, no fraud detection. Applies
+   *  only to an identified caller (an anonymous trigger has no stable
+   *  identity to check across requests). HTTP 409. */
+  PANIC_ALERT_ACTIVE: 'PANIC_ALERT_ACTIVE',
+  /** Panic alert resolve called twice (decision 197). HTTP 409. */
+  PANIC_ALERT_ALREADY_RESOLVED: 'PANIC_ALERT_ALREADY_RESOLVED',
   UNAUTHORIZED: 'UNAUTHORIZED',
   FORBIDDEN: 'FORBIDDEN',
   INTERNAL: 'INTERNAL',

@@ -32,8 +32,6 @@ export const Capabilities = {
   LOCATION_TRACKING: 'location.tracking',
   /** Cross-border personal data transfer (decision 105). */
   DATA_CROSS_BORDER: 'data.cross_border',
-  /** Panic-button dispatch to responders (decisions 51-52, 62-63). */
-  PANIC_DISPATCH: 'panic.dispatch',
   /** Masked reporter <-> helper chat (decisions 54, 176): text between
    *  anonymous parties carries jurisdiction-dependent legal risk, like
    *  media (138). Born WIRED in C1 (messaging/chat.service.ts). */
@@ -44,6 +42,14 @@ export const Capabilities = {
    *  jurisdiction as much as the chat's (176). Born WIRED in RT1
    *  (ratings/helper-rating.service.ts, asserted before the insert). */
   HELPER_RATING: 'helper.rating',
+  /** Panic-button dispatch to the Authorized Responder pool (decisions
+   *  51, 190-199): notifying a restricted pool with the triggerer's
+   *  position (even degraded) carries jurisdiction-dependent legal risk,
+   *  like chat (176) and rating (188). WIRED in PP1
+   *  (panic/panic-alert.service.ts triggerAlert, asserted before the
+   *  insert) — removed from PENDING_WIRING by this same delivery, the
+   *  guard-2 partition spec enforces it. */
+  PANIC_DISPATCH: 'panic.dispatch',
 } as const
 
 export type Capability = (typeof Capabilities)[keyof typeof Capabilities]
@@ -82,12 +88,15 @@ export const PENDING_WIRING: ReadonlySet<Capability> = new Set<Capability>([
   // helper.rating: decision 188 has it born pending and wired in RT1 —
   // both happened in the same delivery (ratings/helper-rating.service.ts
   // asserts it before the insert), so it never entered this set either.
+  // panic.dispatch: WIRED in PP1 (panic/panic-alert.service.ts
+  // triggerAlert, decisions 51/190-199 — asserted before the alert
+  // insert) and therefore removed, the pattern of helper.rating/
+  // chat.masked above.
   Capabilities.REWARD_INTERMEDIATION_OWN,
   Capabilities.MINOR_DATA_RETENTION,
   Capabilities.IDENTITY_DISCLOSURE,
   Capabilities.LOCATION_TRACKING,
   Capabilities.DATA_CROSS_BORDER,
-  Capabilities.PANIC_DISPATCH,
 ])
 
 /**
