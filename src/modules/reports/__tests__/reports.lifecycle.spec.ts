@@ -174,8 +174,10 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
           id: 1,
           helpType: 'physical_presence',
           anonymous: false,
+          helperAccountId: 8,
           helperDisplayName: 'Ana',
           createdAt: new Date('2026-08-03T15:00:00Z'),
+          ratingScore: null,
         },
       ])
 
@@ -190,6 +192,7 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
             helpType: 'physical_presence',
             helperDisplayName: null, // high tier masks even a willing identity
             createdAt: null, // and never leaks timestamps (41)
+            rating: { score: null, ratable: false }, // open case (181)
           },
         ])
       }
@@ -202,15 +205,19 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
           id: 1,
           helpType: 'share',
           anonymous: false,
+          helperAccountId: 8,
           helperDisplayName: 'Ana',
           createdAt: new Date('2026-08-03T15:00:00Z'),
+          ratingScore: null,
         },
         {
           id: 2,
           helpType: 'share',
           anonymous: true,
+          helperAccountId: 9,
           helperDisplayName: 'Beto',
           createdAt: new Date('2026-08-03T15:01:00Z'),
+          ratingScore: null,
         },
       ])
 
@@ -449,5 +456,108 @@ describe('getReportView — chat entry point (C1, decision 172)', () => {
     expect((summary as any).chat).toBeUndefined()
     expect(mockedRepository.getOwnerChatSummary).not.toHaveBeenCalled()
     expect(mockedRepository.getHelperChatSummary).not.toHaveBeenCalled()
+  })
+})
+
+/** RT1 (decisions 48, 180-185, 187): the OWNER view carries, per offer,
+ *  the rating facet the app needs to render "rate" / "rated" — and no
+ *  other view ever carries rating data (185). */
+describe('getReportView — offers[].rating (RT1, decisions 48/180/181/183/185)', () => {
+  const helperOffer = (overrides: Record<string, unknown> = {}) => ({
+    id: 1,
+    helpType: 'share',
+    anonymous: true,
+    helperAccountId: 8,
+    helperDisplayName: 'Ana',
+    createdAt: new Date('2026-08-03T15:00:00Z'),
+    ratingScore: null,
+    ...overrides,
+  })
+  const resolved = (overrides: Partial<ReportRow> = {}) =>
+    row({ status: 'resolved', resolvedAt: new Date('2026-08-03T16:00:00Z'), ...overrides })
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedTier.mockResolvedValue('low')
+    mockedRepository.getTimeline.mockResolvedValue([])
+    mockedRepository.listAttachedMedia.mockResolvedValue([])
+    mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 0, unread: 0 })
+    mockedRepository.getHelperChatSummary.mockResolvedValue(null)
+  })
+
+  it('resolved case, helper with an account, not rated yet -> { score: null, ratable: true }', async () => {
+    mockedRepository.findById.mockResolvedValue(resolved())
+    mockedRepository.findOffersWithNames.mockResolvedValue([helperOffer()])
+    const view = await service.getReportView(7, OWNER_BY_KEY)
+    expect(view.access).toBe('owner')
+    expect((view as any).offers[0].rating).toEqual({ score: null, ratable: true })
+  })
+
+  it('already rated -> the score comes back and ratable is false (183: immutable)', async () => {
+    mockedRepository.findById.mockResolvedValue(resolved())
+    mockedRepository.findOffersWithNames.mockResolvedValue([helperOffer({ ratingScore: 4 })])
+    const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+    expect((view as any).offers[0].rating).toEqual({ score: 4, ratable: false })
+  })
+
+  it('an OPEN case is never ratable (181)', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    mockedRepository.findOffersWithNames.mockResolvedValue([helperOffer()])
+    const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+    expect((view as any).offers[0].rating).toEqual({ score: null, ratable: false })
+  })
+
+  it('a HIDDEN resolved case is not ratable while hidden (162/187) — an existing score still shows', async () => {
+    mockedRepository.findById.mockResolvedValue(resolved({ hidden: true }))
+    mockedRepository.findOffersWithNames.mockResolvedValue([
+      helperOffer(),
+      helperOffer({ id: 2, ratingScore: 5 }),
+    ])
+    const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+    expect((view as any).offers[0].rating).toEqual({ score: null, ratable: false })
+    expect((view as any).offers[1].rating).toEqual({ score: 5, ratable: false })
+  })
+
+  it('a helper WITHOUT an account is never ratable (180)', async () => {
+    mockedRepository.findById.mockResolvedValue(resolved())
+    mockedRepository.findOffersWithNames.mockResolvedValue([helperOffer({ helperAccountId: null })])
+    const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+    expect((view as any).offers[0].rating).toEqual({ score: null, ratable: false })
+  })
+
+  it('the offer entry never leaks the raw join columns (helperAccountId / ratingScore)', async () => {
+    mockedRepository.findById.mockResolvedValue(resolved())
+    mockedRepository.findOffersWithNames.mockResolvedValue([helperOffer({ ratingScore: 3 })])
+    const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+    expect(Object.keys((view as any).offers[0]).sort()).toEqual(
+      ['createdAt', 'helpType', 'helpOfferId', 'helperDisplayName', 'rating'].sort()
+    )
+    expect(JSON.stringify(view)).not.toContain('helperAccountId')
+    expect(JSON.stringify(view)).not.toContain('ratingScore')
+  })
+
+  it('a PARTICIPANT (helper) view carries no rating data at all (184/185)', async () => {
+    mockedRepository.findById.mockResolvedValue(resolved())
+    mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+    mockedRepository.findOffersWithNames.mockResolvedValue([helperOffer({ ratingScore: 1 })])
+    const view = await service.getReportView(7, STRANGER)
+    expect(view.access).toBe('participant')
+    expect((view as any).offers).toBeUndefined()
+    expect(JSON.stringify(view)).not.toContain('rating')
+    expect(mockedRepository.findOffersWithNames).not.toHaveBeenCalled()
+  })
+
+  it('public and summary views carry no rating data either (185)', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    mockedRepository.findOffersWithNames.mockResolvedValue([helperOffer({ ratingScore: 1 })])
+    const open = await service.getReportView(7, STRANGER)
+    expect(open.access).toBe('public')
+    expect(JSON.stringify(open)).not.toContain('rating')
+
+    mockedRepository.findById.mockResolvedValue(resolved())
+    const summary = await service.getReportView(7, STRANGER)
+    expect(summary.access).toBe('summary')
+    expect(JSON.stringify(summary)).not.toContain('rating')
   })
 })

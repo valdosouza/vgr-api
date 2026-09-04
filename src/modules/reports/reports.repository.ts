@@ -153,7 +153,11 @@ export async function getTimeline(
 }
 
 /** Offers as the OWNER's view needs them (masking happens in the service).
- *  SQL over tb_help_offer is table access, not a module import. */
+ *  helperAccountId and ratingScore feed the rating facet (RT1, decisions
+ *  180/183) — the join knows them, the view maps them to { score, ratable }
+ *  and never serializes them raw. SQL over tb_help_offer / tb_helper_rating
+ *  is table access, not a module import (the mechanism of the chat
+ *  summaries below). */
 export async function findOffersWithNames(
   reportId: number
 ): Promise<
@@ -161,15 +165,21 @@ export async function findOffersWithNames(
     id: number
     helpType: string
     anonymous: boolean
+    helperAccountId: number | null
     helperDisplayName: string | null
     createdAt: Date
+    /** The owner's score on this offer, null until rated (183). */
+    ratingScore: number | null
   }>
 > {
   const [rows] = await pool.query<any[]>(
     `SELECT o.id, o.help_type AS helpType, o.anonymous,
-            a.display_name AS helperDisplayName, o.created_at AS createdAt
+            o.helper_account_id AS helperAccountId,
+            a.display_name AS helperDisplayName, o.created_at AS createdAt,
+            r.score AS ratingScore
      FROM tb_help_offer o
      LEFT JOIN tb_user_account a ON a.id = o.helper_account_id
+     LEFT JOIN tb_helper_rating r ON r.tb_help_offer_id = o.id AND r.deleted = 'N'
      WHERE o.tb_report_id = ? AND o.deleted = 'N'
      ORDER BY o.created_at, o.id`,
     [reportId]
@@ -178,8 +188,10 @@ export async function findOffersWithNames(
     id: row.id,
     helpType: row.helpType,
     anonymous: row.anonymous === 'S',
+    helperAccountId: row.helperAccountId ?? null,
     helperDisplayName: row.helperDisplayName ?? null,
     createdAt: row.createdAt,
+    ratingScore: row.ratingScore == null ? null : Number(row.ratingScore),
   }))
 }
 

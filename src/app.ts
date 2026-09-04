@@ -17,6 +17,7 @@ import feedRoutes from '@modules/help-matching/help-matching.routes'
 import helpOfferRoutes from '@modules/help-offers/help-offers.routes'
 import rewardRoutes from '@modules/reward/reward.routes'
 import chatRoutes from '@modules/messaging/chat.routes'
+import ratingRoutes, { reportRatingRoutes } from '@modules/ratings/helper-rating.routes'
 import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
 
@@ -107,6 +108,14 @@ app.use('/app-auth', authRateLimitMiddleware, appAuthRoutes)
 // does not apply — multer enforces MEDIA_MAX_BYTES (decision 129).
 app.use('/app-media', rateLimitMiddleware, mediaRoutes)
 
+// Helper rating (RT1 — decisions 48/178-189): the owner rates one offer
+// of a RESOLVED case. The ratings module's route on the reports module's
+// path, mounted from HERE on the full path with mergeParams (the C3
+// mechanism of gateway/router.ts) and BEFORE /app-reports: the request
+// is rate-limited once, the reports router never sees it, and neither
+// module imports the other.
+app.use('/app-reports/:reportId/offers/:offerId/rating', rateLimitMiddleware, reportRatingRoutes)
+
 // Reports (decisions 134-142) — the core promise: anonymous submission
 // allowed (32), gated by jurisdiction capability, idempotent (137).
 app.use('/app-reports', rateLimitMiddleware, reportRoutes)
@@ -127,6 +136,11 @@ app.use('/app-reward', rateLimitMiddleware, appAuthMiddleware, rewardRoutes)
 // (optionalAppAuth per route, as reports do); the per-participant message
 // rate (177) is enforced in the service, on top of this per-IP limit.
 app.use('/app-chat', rateLimitMiddleware, chatRoutes)
+
+// Helper reputation (decisions 184/185) — the helper reads their OWN
+// aggregate only; the route itself demands the app token (never
+// optional): an anonymous helper has no reputation to read.
+app.use('/app-ratings', rateLimitMiddleware, ratingRoutes)
 
 // JWT auth on all /api routes (public routes, e.g. listing anonymous
 // reports, go BEFORE this line once they exist — scope-refinement will

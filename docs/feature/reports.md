@@ -79,6 +79,9 @@ anonymous reporter's app kept the key it generated; header, never URL).
   offers list); anyone else gets the tier-DEGRADED public view on open
   cases (same `shared/geo/degrade` grid as the feed — the sharper surface
   would betray the position) or the closure summary on resolved ones.
+  Since RT1 (decisions 48/180-185, `docs/feature/rating.md`) each entry
+  of the OWNER's `offers[]` carries `rating: { score, ratable }`;
+  participant, public and summary views carry no rating data.
 
 ## Category form catalog for the app (A1 — decision 47)
 

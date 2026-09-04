@@ -274,3 +274,98 @@ describe('reports.repository — purge reaches the chat (decisions 131/173)', ()
     expect(await repository.getHelperChatSummary(7, 8)).toBeNull()
   })
 })
+
+/** RT1 (decision 187): the rating is reputation, not evidence — the purge
+ *  never reaches tb_helper_rating; and the offer row it hangs on (FK) is
+ *  never deleted either (18 keeps offers linked). */
+describe('reports.repository — purge preserves ratings (decision 187)', () => {
+  const mockedGetConnection = (pool as any).getConnection as jest.Mock
+
+  beforeEach(() => jest.resetAllMocks())
+
+  it('purgeReport touches neither tb_helper_rating nor tb_help_offer, and never DELETEs', async () => {
+    const conn = {
+      beginTransaction: jest.fn().mockResolvedValue(undefined),
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn(),
+      query: jest.fn().mockResolvedValue([{ affectedRows: 1 }]),
+    }
+    mockedGetConnection.mockResolvedValue(conn)
+
+    await repository.purgeReport(7)
+
+    const statements = conn.query.mock.calls.map(([sql]) => sql.replace(/\s+/g, ' '))
+    expect(statements.length).toBeGreaterThan(0)
+    for (const statement of statements) {
+      expect(statement).not.toContain('tb_helper_rating')
+      expect(statement).not.toContain('tb_help_offer')
+      expect(statement).not.toMatch(/DELETE/i)
+    }
+    expect(mockedPool.query).not.toHaveBeenCalled()
+  })
+})
+
+/** RT1: the owner's offers list carries the rating facet through ONE
+ *  query — a LEFT JOIN on tb_helper_rating (table access, never a module
+ *  import), the mechanism of the chat summaries (C1). */
+describe('reports.repository — findOffersWithNames carries the rating (RT1, decisions 180/183)', () => {
+  beforeEach(() => jest.resetAllMocks())
+
+  it('LEFT JOINs the living rating of each offer and projects helperAccountId + ratingScore', async () => {
+    mockedPool.query.mockResolvedValueOnce([
+      [
+        {
+          id: 1,
+          helpType: 'share',
+          anonymous: 'S',
+          helperAccountId: 8,
+          helperDisplayName: 'Ana',
+          createdAt: new Date('2026-08-03T15:00:00Z'),
+          ratingScore: 4,
+        },
+        {
+          id: 2,
+          helpType: 'share',
+          anonymous: 'N',
+          helperAccountId: null,
+          helperDisplayName: null,
+          createdAt: new Date('2026-08-03T15:01:00Z'),
+          ratingScore: null,
+        },
+      ],
+      undefined,
+    ] as any)
+
+    const rows = await repository.findOffersWithNames(7)
+
+    const [sql, params] = mockedPool.query.mock.calls[0] as unknown as [string, unknown[]]
+    const flat = sql.replace(/\s+/g, ' ')
+    expect(flat).toMatch(
+      /LEFT JOIN tb_helper_rating \w+ ON \w+\.tb_help_offer_id = o\.id AND \w+\.deleted = 'N'/
+    )
+    expect(flat).toContain('o.helper_account_id AS helperAccountId')
+    expect(flat).toContain("o.tb_report_id = ? AND o.deleted = 'N'")
+    expect(params).toEqual([7])
+    expect(rows).toEqual([
+      {
+        id: 1,
+        helpType: 'share',
+        anonymous: true,
+        helperAccountId: 8,
+        helperDisplayName: 'Ana',
+        createdAt: new Date('2026-08-03T15:00:00Z'),
+        ratingScore: 4,
+      },
+      {
+        id: 2,
+        helpType: 'share',
+        anonymous: false,
+        helperAccountId: null,
+        helperDisplayName: null,
+        createdAt: new Date('2026-08-03T15:01:00Z'),
+        ratingScore: null,
+      },
+    ])
+  })
+})

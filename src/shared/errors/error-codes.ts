@@ -32,6 +32,17 @@ export const ErrorCodes = {
   /** The message carries a direct contact (decision 171). HTTP 422, with
    *  the same code on the `text` field and `params: { kind, match }`. */
   CONTACT_NOT_ALLOWED: 'CONTACT_NOT_ALLOWED',
+  /** Helper rating (decision 180): the offer's helper has no account, so
+   *  there is no internal identity for the score to accumulate on.
+   *  HTTP 422. */
+  RATING_NOT_ALLOWED: 'RATING_NOT_ALLOWED',
+  /** Helper rating (decisions 181/162): the case is not resolved yet, or
+   *  is hidden — writes are closed. HTTP 409 with
+   *  `params: { reason: 'open' | 'hidden' }`. */
+  RATING_CLOSED: 'RATING_CLOSED',
+  /** Helper rating (decision 183): one rating per help offer, immutable —
+   *  a second attempt (another clientKey) is refused. HTTP 409. */
+  ALREADY_RATED: 'ALREADY_RATED',
   UNAUTHORIZED: 'UNAUTHORIZED',
   FORBIDDEN: 'FORBIDDEN',
   INTERNAL: 'INTERNAL',

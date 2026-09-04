@@ -97,11 +97,25 @@
 - [ ] Should fall back to the global default rule when the requested Category has no rule of its own
 
 **HelperRating**
-> **Amended, 2026-08-22**: rating (decisão 48) é frente ainda não aberta
-> (`VGR-RESUMO.md` §6) — nenhum código existe para este agregado. Cenários
-> abaixo mantidos como desenho original para quando a frente abrir.
-- [ ] Should persist against the Helper's internal id even when the Helper was anonymous to the Reporter
-- [ ] Should reject a second rating on the same HelpOffer from the same Reporter
+> **Amended, 2026-09-03**: implemented (RT1, decisions 178–189) in
+> `src/modules/ratings/` (`docs/feature/rating.md`) — replaces the
+> 2026-08-22 "front not open yet" note. Scenarios live in
+> `helper-rating.service.spec.ts`, `helper-rating.routes.spec.ts`,
+> `helper-rating.repository.spec.ts` and the RT1 blocks of
+> `reports.lifecycle.spec.ts` / `reports.repository.spec.ts`.
+- [x] Should persist against the Helper's internal id even when the Helper was anonymous to the Reporter (`helper-rating.service.spec` — "an ANONYMOUS offer with an account is rated against that account")
+- [x] Should reject a second rating on the same HelpOffer from the same Reporter (`helper-rating.service.spec` — 409 `ALREADY_RATED` on a different clientKey; the UNIQUE race re-read)
+- [x] Should refuse to rate a Helper who has no account — 422 `RATING_NOT_ALLOWED` (decision 180)
+- [x] Should refuse to rate while the Report is open or hidden — 409 `RATING_CLOSED` with `params.reason` open|hidden (decisions 181/162)
+- [x] Should answer the SAME rating (200) on an offline-queue replay of the clientKey, even if the case was hidden since (decisions 137/183)
+- [x] Should assert the `helper.rating` capability before any write — 451 and no INSERT when blocked (decision 188)
+- [x] Should answer 404, never 403, to a non-owner (helper, stranger, bare request) and to an offer of another Report
+- [x] Should validate the score as an integer 1..5 — 0, 6, 4.5, "5" and missing are 422 on the `score` field (decision 182)
+- [x] Should leave the accountability entry `helper_rating.submit` for the ANONYMOUS owner only (decision 23, pattern of `help_offer.submit`)
+- [x] Should serve the helper their OWN `{ count, average }` only — 401 anonymous, `average` null under k = 5, no per-case data, no route for another account (decisions 184/185)
+- [x] Should exclude ratings of currently hidden Reports from the aggregate — the SQL JOINs `tb_report.hidden = 'N'` (decision 187)
+- [x] Should keep the rating rows through the Report purge — the purge statements never touch `tb_helper_rating` (decision 187)
+- [x] Should carry `offers[].rating { score, ratable }` on the OWNER view only — participant, public and summary views carry no rating data (decisions 181/183/185)
 
 **PanicAlert**
 > **Amended, 2026-08-22**: só o pré-requisito existe hoje —

@@ -39,6 +39,7 @@ Mounted at `/api/legal-policy` (jurisdictions / capabilities / rules). The gate 
 - **Every capability is in `PENDING_WIRING`**: the consuming domain features (report, reward, panic dispatch) are not built yet. `capabilities.catalog.spec.ts` fails the build if an entry is ever neither wired nor pending, or both — when a domain task wires a capability, it must remove the entry.
 - L3 (admin screens) — DONE 2026-08-19 in `apps/admin` (`app/docs/feature/legal-policy.md`). L2 (AI assessment pipeline → `tb_legal_assessment`, promotion from assessment) is NOT built — blocked on choosing the AI provider. Round-2 items 6 (frozen-data behavior) and 7 (assessment record shape) remain open, non-blocking.
 - `chat.masked` (decision 176) added 2026-09-03 by the masked-chat front, born WIRED (`modules/messaging/chat.service.ts` asserts it before thread creation and before every post) — see `docs/feature/chat.md`.
+- `helper.rating` (decision 188) added 2026-09-03 by the helper-rating front (RT1), born WIRED (`modules/ratings/helper-rating.service.ts` asserts it before the insert; blocked → 451, nothing written) — see `docs/feature/rating.md`.
 - Expiry warning job: deliberately not built (decision 90 note — no scheduler until a real job needs it; enforcement doesn't need one).
 
 ## REFERENCES

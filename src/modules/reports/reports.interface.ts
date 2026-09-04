@@ -99,6 +99,19 @@ export interface OfferView {
   helpType: string
   helperDisplayName: string | null
   createdAt: string | null
+  /** Rating facet (RT1, decisions 48/180/181/183) — owner only (185). */
+  rating: OfferRatingView
+}
+
+/** What the OWNER sees of an offer's rating: the score they gave (null
+ *  until rated) and whether they can rate it NOW — the case is resolved
+ *  (181) and not hidden (162), the helper holds an account (180) and no
+ *  rating exists yet (183). Shape owned here — no cross-module import;
+ *  the rating itself is written through /app-reports/:id/offers/:offerId/
+ *  rating (modules/ratings). Participants never carry it (185). */
+export interface OfferRatingView {
+  score: number | null
+  ratable: boolean
 }
 
 /** Attachment as owner/participant see it (M2). The public open view

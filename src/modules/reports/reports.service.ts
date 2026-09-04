@@ -442,6 +442,12 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
 
   if (isOwner) {
     const offers = await repository.findOffersWithNames(report.id)
+    // Rating facet (RT1 — decisions 48/180/181/183): the owner rates an
+    // offer once the case is resolved and not hidden (162), only a helper
+    // WITH an account, and only once. Owner only — a participant never
+    // sees rating data (185); the write is /app-reports/:id/offers/
+    // :offerId/rating (modules/ratings).
+    const caseRatable = report.status === 'resolved' && !report.hidden
     view.offers = offers.map((row) => ({
       helpOfferId: row.id,
       helpType: row.helpType,
@@ -449,6 +455,10 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
       // (decisions 6/40/60); timestamps never on high tier (41).
       helperDisplayName: row.anonymous || tier === 'high' ? null : row.helperDisplayName,
       createdAt: tier === 'high' ? null : row.createdAt.toISOString(),
+      rating: {
+        score: row.ratingScore,
+        ratable: caseRatable && row.helperAccountId !== null && row.ratingScore === null,
+      },
     }))
   }
 

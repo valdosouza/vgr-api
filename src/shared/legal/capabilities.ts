@@ -38,6 +38,12 @@ export const Capabilities = {
    *  anonymous parties carries jurisdiction-dependent legal risk, like
    *  media (138). Born WIRED in C1 (messaging/chat.service.ts). */
   CHAT_MASKED: 'chat.masked',
+  /** The reporter rates a helper once the case is resolved; the score
+   *  accumulates on the helper's INTERNAL identity (decisions 48, 188):
+   *  reputation is profiling of a person, and its legal risk varies by
+   *  jurisdiction as much as the chat's (176). Born WIRED in RT1
+   *  (ratings/helper-rating.service.ts, asserted before the insert). */
+  HELPER_RATING: 'helper.rating',
 } as const
 
 export type Capability = (typeof Capabilities)[keyof typeof Capabilities]
@@ -73,6 +79,9 @@ export const PENDING_WIRING: ReadonlySet<Capability> = new Set<Capability>([
   // chat.masked: born WIRED in C1 (messaging/chat.service.ts, decision
   // 176 — asserted before thread creation and before every post), so it
   // never entered this set.
+  // helper.rating: decision 188 has it born pending and wired in RT1 —
+  // both happened in the same delivery (ratings/helper-rating.service.ts
+  // asserts it before the insert), so it never entered this set either.
   Capabilities.REWARD_INTERMEDIATION_OWN,
   Capabilities.MINOR_DATA_RETENTION,
   Capabilities.IDENTITY_DISCLOSURE,

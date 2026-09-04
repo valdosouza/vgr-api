@@ -23,6 +23,7 @@ Index of project technical documentation for **VGR API**. Use the links below to
 | [**reports.md**](./feature/reports.md) | App-plane report lifecycle: submit, edit, resolve, visibility, media attach, case freeze (decisions 134-142). | Optional |
 | [**report-moderation.md**](./feature/report-moderation.md) | Panel search + case detail with degraded position, audited reads and the exact-position grant; hide/unhide a report and block/unblock a media with a catalog reason; aggregated statistics under the k = 5 floor (decisions 158-167). | Optional |
 | [**chat.md**](./feature/chat.md) | Masked reporter-helper chat on the app plane: eligibility, opaque participant tokens, anti-contact filter, cursor delivery, lifecycle, limits, Legal Gate capability `chat.masked`; plus the audited panel read under the no-bootstrap `chat_evidence` grant (decisions 54, 169-177). | Optional |
+| [**rating.md**](./feature/rating.md) | Helper rating on the app plane: the report owner rates one help offer of a resolved case (integer 1..5, once, idempotent by clientKey); the score accumulates on the helper's internal identity; the helper reads only their own `{ count, average }` under the k = 5 floor; Legal Gate capability `helper.rating` (decisions 48, 178-189). | Optional |
 | [**panic-responders.md**](./feature/panic-responders.md) | Authorized responder pool and its approval queue (decisions 51-52). | Optional |
 
 ## Recommended Reading Order
