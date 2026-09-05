@@ -67,6 +67,7 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
     mockedRepository.findPendingUnfreeze.mockResolvedValue(null)
     mockedRepository.markResolved.mockResolvedValue(true)
     mockedRepository.freeze.mockResolvedValue(true)
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue(null)
   })
 
   describe('editReport (decision 19)', () => {
@@ -347,6 +348,7 @@ describe('hidden report on the APP plane (B2 — decisions 162/167)', () => {
     mockedRepository.getHelperChatSummary.mockResolvedValue(null)
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue(null)
   })
 
   it('a stranger gets 404 on a hidden OPEN case — gone from the public detail', async () => {
@@ -418,6 +420,7 @@ describe('getReportView — chat entry point (C1, decision 172)', () => {
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
     mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 2, unread: 3 })
     mockedRepository.getHelperChatSummary.mockResolvedValue({ threadId: 5, unread: 1 })
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue(null)
   })
 
   it('the owner gets { threads, unread }', async () => {
@@ -484,6 +487,7 @@ describe('getReportView — offers[].rating (RT1, decisions 48/180/181/183/185)'
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
     mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 0, unread: 0 })
     mockedRepository.getHelperChatSummary.mockResolvedValue(null)
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue(null)
   })
 
   it('resolved case, helper with an account, not rated yet -> { score: null, ratable: true }', async () => {
@@ -559,5 +563,85 @@ describe('getReportView — offers[].rating (RT1, decisions 48/180/181/183/185)'
     const summary = await service.getReportView(7, STRANGER)
     expect(summary.access).toBe('summary')
     expect(JSON.stringify(summary)).not.toContain('rating')
+  })
+})
+
+/** DS1 (decisions 200-207): the direction estimate facet appears on the
+ *  `public` and `owner`/`participant` branches — NEVER on `summary` (204:
+ *  that tier already carries no other detail). Only `{ direction }` ever
+ *  leaves (203) — no count, no distribution. */
+describe('getReportView — direction estimate facet (DS1, decisions 200-204)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedTier.mockResolvedValue('low')
+    mockedRepository.getTimeline.mockResolvedValue([])
+    mockedRepository.findOffersWithNames.mockResolvedValue([])
+    mockedRepository.listAttachedMedia.mockResolvedValue([])
+    mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 0, unread: 0 })
+    mockedRepository.getHelperChatSummary.mockResolvedValue(null)
+  })
+
+  it('a stranger on an OPEN (public) case sees the facet once it resolves to a direction', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue({ direction: 'N' })
+
+    const view = await service.getReportView(7, STRANGER)
+
+    expect(view.access).toBe('public')
+    expect((view as any).directionEstimate).toEqual({ direction: 'N' })
+    expect(mockedRepository.getDirectionEstimateFacet).toHaveBeenCalledWith(7)
+  })
+
+  it('a stranger on an OPEN case sees NULL below the floor (202) — decision 204/202 never leak the count', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue(null)
+
+    const view = await service.getReportView(7, STRANGER)
+
+    expect((view as any).directionEstimate).toBeNull()
+  })
+
+  it('the OWNER sees the same facet', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue({ direction: 'SE' })
+
+    const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+
+    expect(view.access).toBe('owner')
+    expect((view as any).directionEstimate).toEqual({ direction: 'SE' })
+  })
+
+  it('a PARTICIPANT (identified helper with an offer) sees the same facet', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue({ direction: 'W' })
+
+    const view = await service.getReportView(7, STRANGER)
+
+    expect(view.access).toBe('participant')
+    expect((view as any).directionEstimate).toEqual({ direction: 'W' })
+  })
+
+  it('a RESOLVED case seen by a non-participant (summary) carries NO direction estimate field at all (204)', async () => {
+    mockedRepository.findById.mockResolvedValue(
+      row({ status: 'resolved', resolvedAt: new Date('2026-08-03T15:00:00Z') })
+    )
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue({ direction: 'N' })
+
+    const view = await service.getReportView(7, STRANGER)
+
+    expect(view.access).toBe('summary')
+    expect((view as any).directionEstimate).toBeUndefined()
+    expect(mockedRepository.getDirectionEstimateFacet).not.toHaveBeenCalled()
+  })
+
+  it('never leaks a count or a distribution — only { direction } (decision 203)', async () => {
+    mockedRepository.findById.mockResolvedValue(row())
+    mockedRepository.getDirectionEstimateFacet.mockResolvedValue({ direction: 'N' })
+
+    const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+
+    expect(Object.keys((view as any).directionEstimate)).toEqual(['direction'])
   })
 })

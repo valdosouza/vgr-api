@@ -28,7 +28,11 @@ export const Capabilities = {
   MINOR_DATA_RETENTION: 'minor.data_retention',
   /** Helper identity disclosure flows (decisions 6, 34, 40). */
   IDENTITY_DISCLOSURE: 'identity.disclosure',
-  /** Location trails and direction sightings (decisions 7, 22, 26). */
+  /** Location trails and direction sightings (decisions 7, 22, 26). WIRED
+   *  in DS1 (direction-sightings/direction-sightings.service.ts
+   *  logDirectionSighting, decisions 200-207 — asserted before the
+   *  sighting insert) — removed from PENDING_WIRING by this same
+   *  delivery, the pattern of helper.rating/chat.masked/panic.dispatch. */
   LOCATION_TRACKING: 'location.tracking',
   /** Cross-border personal data transfer (decision 105). */
   DATA_CROSS_BORDER: 'data.cross_border',
@@ -92,10 +96,13 @@ export const PENDING_WIRING: ReadonlySet<Capability> = new Set<Capability>([
   // triggerAlert, decisions 51/190-199 — asserted before the alert
   // insert) and therefore removed, the pattern of helper.rating/
   // chat.masked above.
+  // location.tracking: WIRED in DS1 (direction-sightings/
+  // direction-sightings.service.ts logDirectionSighting, decisions
+  // 200-207 — asserted before the sighting insert) and therefore
+  // removed, the same pattern.
   Capabilities.REWARD_INTERMEDIATION_OWN,
   Capabilities.MINOR_DATA_RETENTION,
   Capabilities.IDENTITY_DISCLOSURE,
-  Capabilities.LOCATION_TRACKING,
   Capabilities.DATA_CROSS_BORDER,
 ])
 

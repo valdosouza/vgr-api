@@ -10,6 +10,12 @@ import {
 } from '@modules/reports/reports.interface'
 import { ModerationReason } from '@shared/moderation/moderation-reason'
 import { RiskTier } from '@shared/risk/risk-tier'
+import {
+  Direction,
+  meetsDisclosureFloor,
+  pickWinningDirection,
+} from '@shared/direction-sighting/direction-estimate'
+import { directionSightingConfig } from '@shared/config/env'
 
 const REPORT_SELECT = `
   SELECT id, client_key AS clientKey, category, free_tag AS freeTag, subject,
@@ -387,6 +393,42 @@ export async function getHelperChatSummary(
   )
   const row = rows[0]
   return row ? { threadId: row.threadId, unread: Number(row.unread ?? 0) } : null
+}
+
+/* ------------------------------------------------------------------ *
+ * Direction estimate facet (DS1 — decisions 200-204). SQL over
+ * tb_direction_estimate (owned by the direction-sightings module) is
+ * table access, not a module import — same posture as the chat summaries
+ * above. The reconciliation algorithm (winning-direction pick, decision
+ * 26) and the disclosure floor (202) are the SHARED pure functions of
+ * @shared/direction-sighting/direction-estimate.ts — help-matching's feed
+ * facet reuses the identical functions over its own copy of this query.
+ * ------------------------------------------------------------------ */
+
+/** { direction } once the report's total sightings (every direction
+ *  summed, never just the winner's) reach the env-configurable floor
+ *  (202); null below it, or when the report has no sightings at all
+ *  (an ineligible category never accumulates any, so no extra category
+ *  check is needed here — see direction-sightings' write-side gate). */
+export async function getDirectionEstimateFacet(
+  reportId: number
+): Promise<{ direction: Direction } | null> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT direction, total_weight AS totalWeight, sighting_count AS sightingCount,
+            first_reported_at AS firstReportedAt
+     FROM tb_direction_estimate
+     WHERE tb_report_id = ?`,
+    [reportId]
+  )
+  const accumulators = rows.map((row) => ({
+    direction: row.direction as Direction,
+    totalWeight: Number(row.totalWeight),
+    sightingCount: row.sightingCount,
+    firstReportedAt: row.firstReportedAt,
+  }))
+  if (!meetsDisclosureFloor(accumulators, directionSightingConfig().minCount)) return null
+  const direction = pickWinningDirection(accumulators)
+  return direction ? { direction } : null
 }
 
 /* ------------------------------------------------------------------ *

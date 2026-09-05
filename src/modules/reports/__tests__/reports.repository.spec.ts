@@ -437,3 +437,49 @@ describe('reports.repository — findOffersForPanel carries the rating score (RT
     ])
   })
 })
+
+/** DS1 (decisions 200-207): SQL over tb_direction_estimate (owned by the
+ *  direction-sightings module) is table access, not a module import —
+ *  same posture as the chat summaries / rating join above. The floor
+ *  (202) and winning-direction pick (26) are the SHARED pure functions
+ *  of @shared/direction-sighting/direction-estimate.ts. */
+describe('reports.repository — getDirectionEstimateFacet (DS1, decisions 200-204)', () => {
+  beforeEach(() => jest.resetAllMocks())
+
+  it('returns null when the report has no accumulator rows yet (never met the floor)', async () => {
+    mockedPool.query.mockResolvedValue([[], undefined] as any)
+    expect(await repository.getDirectionEstimateFacet(7)).toBeNull()
+  })
+
+  it('returns null BELOW the floor (202) even with a decisive weight lead', async () => {
+    mockedPool.query.mockResolvedValue([
+      [{ direction: 'N', totalWeight: '100.00', sightingCount: 4, firstReportedAt: new Date() }],
+      undefined,
+    ] as any)
+    expect(await repository.getDirectionEstimateFacet(7)).toBeNull()
+  })
+
+  it('returns the winning direction AT the floor', async () => {
+    mockedPool.query.mockResolvedValue([
+      [
+        { direction: 'N', totalWeight: '1.50', sightingCount: 3, firstReportedAt: new Date('2026-09-04T10:00:00Z') },
+        { direction: 'S', totalWeight: '2.00', sightingCount: 2, firstReportedAt: new Date('2026-09-04T11:00:00Z') },
+      ],
+      undefined,
+    ] as any)
+    expect(await repository.getDirectionEstimateFacet(7)).toEqual({ direction: 'S' })
+    const [sql, params] = mockedPool.query.mock.calls[0] as unknown as [string, unknown[]]
+    expect(sql.replace(/\s+/g, ' ')).toContain('FROM tb_direction_estimate')
+    expect(params).toEqual([7])
+  })
+
+  it('respects the DIRECTION_SIGHTING_MIN_COUNT env override', async () => {
+    process.env.DIRECTION_SIGHTING_MIN_COUNT = '2'
+    mockedPool.query.mockResolvedValue([
+      [{ direction: 'N', totalWeight: '1.00', sightingCount: 2, firstReportedAt: new Date() }],
+      undefined,
+    ] as any)
+    expect(await repository.getDirectionEstimateFacet(7)).toEqual({ direction: 'N' })
+    delete process.env.DIRECTION_SIGHTING_MIN_COUNT
+  })
+})

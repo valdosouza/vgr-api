@@ -42,13 +42,20 @@
 - [ ] Should emit HelpOfferSubmitted when creation succeeds
 
 **DirectionEstimate**
-> **Amended, 2026-08-22**: direction sightings (decisões 22/26/27) é frente
-> ainda não aberta (`VGR-RESUMO.md` §6) — nenhum código existe para este
-> agregado. Cenários abaixo mantidos como desenho original para quando a
-> frente abrir, não como trabalho pendente ativo.
-- [ ] Should initialize DirectionEstimate with an even 50/50 prior between the two reported directions when the first Sighting arrives
-- [ ] Should reweight probabilityByDirection when applySighting() is called with an additional Sighting
-- [ ] Should reject a weight update that would make probabilityByDirection sum to a value other than 1.0
+> **Amended, 2026-09-04**: implemented (DS1, decisions 200-207) — see the
+> `DirectionEstimate` note in `003-api-tactical-design.md` and
+> `docs/feature/direction-sightings.md`. There is no single
+> `probabilityByDirection: Map<Direction, number>` field: `tb_direction_estimate`
+> holds one row per (report, direction) with `total_weight`/`sighting_count`,
+> updated incrementally. The "even 50/50 prior between the first two
+> reported directions" falls out naturally from equal-weight accumulators
+> before a third sighting shifts the balance — it was never a separate
+> stored/initialized state to test in isolation, so the scenario below is
+> ticked against the WEIGHTING test that proves the shift, not a literal
+> "initialize at 50/50" unit.
+- [x] Should initialize DirectionEstimate with an even 50/50 prior between the two reported directions when the first Sighting arrives (falls out of equal per-sighting weights before a third direction arrives — `direction-estimate.spec.ts` "picks the direction with the HIGHEST accumulated weight, not the highest count")
+- [x] Should reweight probabilityByDirection when applySighting() is called with an additional Sighting (`direction-sightings.service.spec.ts` "3 anonymous sightings for direction A are OUTWEIGHED by 2 identified sightings for direction B")
+- [ ] N/A — Should reject a weight update that would make probabilityByDirection sum to a value other than 1.0: the implemented model has no normalized-to-1.0 probability distribution to protect (203: only the single winning direction is ever exposed, the underlying accumulated weights are an internal implementation detail, never a public-facing sum-to-1 invariant)
 
 **Reward**
 > **Amended, 2026-08-22**: o domínio Reward foi reconstruído do zero como R0
@@ -176,8 +183,13 @@
 - [ ] Should reject DynamicRadius when value is zero or negative
 
 **SightingWeight**
-- [ ] Should create SightingWeight successfully when value is between 0 and 1 inclusive
-- [ ] Should produce a lower SightingWeight for an anonymous reporterRole than for an identified one (decision 27)
+> **Amended, 2026-09-04**: implemented — not a standalone value-object
+> class; `directionSightingConfig()` (`shared/config/env.ts`) resolves
+> `SIGHTING_WEIGHT_IDENTIFIED`/`SIGHTING_WEIGHT_ANONYMOUS` (decision 205),
+> and the resolved number is stored on `tb_direction_sighting.weight` at
+> logging time.
+- [x] Should create SightingWeight successfully when value is between 0 and 1 inclusive (env defaults 1.0/0.5, both within range; `direction-sightings.service.spec.ts` "respects SIGHTING_WEIGHT_IDENTIFIED / SIGHTING_WEIGHT_ANONYMOUS env overrides")
+- [x] Should produce a lower SightingWeight for an anonymous reporterRole than for an identified one (decision 27) (`direction-sightings.service.spec.ts` "an ANONYMOUS sighting is stored with a LOWER weight than an IDENTIFIED one")
 
 **RewardOffer**
 - [ ] Should create RewardOffer successfully for each of the four kinds: money, perk, reciprocity, none
@@ -195,9 +207,12 @@
 - [ ] Should carry no state between executions (pure function)
 
 **ReconcileDirectionEstimate**
-- [ ] Should shift probabilityByDirection toward the direction with more, higher-weighted Sightings
-- [ ] Should fail when given a Sighting for a Report that has no existing DirectionEstimate
-- [ ] Should carry no state between executions
+> **Amended, 2026-09-04**: implemented as the pure functions
+> `pickWinningDirection`/`totalSightingCount`/`meetsDisclosureFloor`
+> (`shared/direction-sighting/direction-estimate.ts`, decision 26).
+- [x] Should shift probabilityByDirection toward the direction with more, higher-weighted Sightings (`direction-estimate.spec.ts` "picks the direction with the HIGHEST accumulated weight, not the highest count"; weight over raw count is the whole point of decision 26 — a `never picks by insertion order alone when weights differ` case covers the same ground)
+- [ ] N/A — Should fail when given a Sighting for a Report that has no existing DirectionEstimate: the implemented design has no separate "estimate must pre-exist" precondition — the FIRST sighting for a report creates its own `tb_direction_estimate` row via the same `INSERT ... ON DUPLICATE KEY UPDATE` every subsequent sighting uses (`direction-sightings.repository.spec.ts` "insertSighting"), so there is no failure mode to test here
+- [x] Should carry no state between executions (pure functions, no closures over mutable state — `direction-estimate.spec.ts` calls each function repeatedly with fresh inputs and asserts only on the return value)
 
 ### 1.4 Retention Job
 
@@ -230,8 +245,13 @@
 - [ ] Should return all HelpOffers linked to a Report after that Report is Resolved (decision 18)
 
 **DirectionEstimateRepository**
-- [ ] Should persist the updated probabilityByDirection after each applySighting() call
-- [ ] Should fully roll back without partial state if a mid-transaction failure occurs during reconciliation
+> **Amended, 2026-09-04**: implemented as `direction-sightings.repository.ts`
+> (write side, migration 047) plus each consuming module's own read query
+> (`reports.repository.ts getDirectionEstimateFacet`, `help-matching.
+> repository.ts findDirectionEstimates`) — table access, not a module
+> import (the chat/rating facets' own precedent in `reports.repository.ts`).
+- [x] Should persist the updated probabilityByDirection after each applySighting() call (as `total_weight`/`sighting_count` accumulators, not a probability map — `direction-sightings.repository.spec.ts` "insertSighting" asserts the `ON DUPLICATE KEY UPDATE` upsert clause)
+- [x] Should fully roll back without partial state if a mid-transaction failure occurs during reconciliation (`direction-sightings.repository.spec.ts` "rolls back and releases the connection if the aggregate upsert fails" — the log insert and the aggregate upsert share ONE transaction, mirrors `chat.repository.ts insertThreadWithParticipants`)
 
 **RewardRepository**
 - [ ] Should persist and retrieve a Reward with an opaque reportId reference only, no denormalized Category/Tags
@@ -272,8 +292,12 @@
 - [ ] Should reject SubmitHelpOffer before persistence when helperId equals the Report's reporterId
 
 **LogDirectionSighting → DirectionEstimateRepository**
-- [ ] Should execute LogDirectionSighting → DirectionEstimate reconciled → persisted → response returned, all within one synchronous request (decision 22)
-- [ ] Should produce a consistent DirectionEstimate when the same Sighting is submitted twice (idempotency, if a client retries after a timeout)
+> **Amended, 2026-09-04**: implemented (DS1, decisions 200-207) — see the
+> `LogDirectionSighting` note above. `DirectionSightingLogged` has no
+> event bus (see the note on that event, Section 4) — the one transaction
+> IS the persisted, reconciled fact the response reads back.
+- [x] Should execute LogDirectionSighting → DirectionEstimate reconciled → persisted → response returned, all within one synchronous request (decision 22) (`direction-sightings.service.spec.ts` "the WRITE response returns the estimate/count on the VERY FIRST sighting, below any floor"; `direction-sightings.routes.spec.ts` "201s for an ANONYMOUS caller")
+- [x] Should produce a consistent DirectionEstimate when the same Sighting is submitted twice (idempotency, if a client retries after a timeout) (`direction-sightings.service.spec.ts` "replays the SAME sighting on a repeated clientKey — never re-inserts, recomputes the estimate"; `direction-sightings.routes.spec.ts` "200s with the SAME sighting on a clientKey replay")
 
 **AllocateReward → RewardRepository**
 - [ ] Should execute AllocateReward → Reward updated → RewardAllocated emitted → persisted, only when Report is Resolved and caller is the Reporter
@@ -341,10 +365,10 @@
   - When: `POST /api/help-offers` is called with `{ reportId, helpType }`
   - Then: response is 201; HelpOfferSubmitted is emitted
 
-- [ ] **Should log a Direction Sighting and return the updated estimate synchronously**
-  - Given: an existing Report with an active DirectionEstimate at 50/50
-  - When: `POST /api/direction-sightings` is called with `{ reportId, direction, reporterRole }`
-  - Then: response is 201 and includes the reconciled probabilityByDirection in the same request/response cycle
+- [x] **Should log a Direction Sighting and return the updated estimate synchronously** (implemented 2026-09-04, DS1 — TWO corrections to this stale scenario, both noted, not new decisions: (1) plane — `POST /api/direction-sightings` predates the two-plane split (119); the real route is `POST /app-direction-sightings`, `optionalAppAuth`, same class of fix as panic's responder-pool `POST`; (2) disclosure — decision 203 (closed AFTER this scenario was drafted) means the response never carries `probabilityByDirection`, only `{ sightingId, reportId, estimate: Direction | null, count }` — see the write/read asymmetry note in `docs/feature/direction-sightings.md`)
+  - Given: an existing Report with sightings already reconciling toward a direction
+  - When: `POST /app-direction-sightings` is called with `{ reportId, direction, clientKey }`
+  - Then: response is 201 (200 on a clientKey replay) with `{ sightingId, reportId, estimate, count }` — `estimate`/`count` are the actor's own synchronous feedback, NEVER gated by the disclosure floor (202), and NEVER the full distribution (203) — `direction-sightings.routes.spec.ts`
 
 - [ ] **Should resolve a Report and notify linked HelpOffers**
   - Given: an existing Report with 2 linked HelpOffers

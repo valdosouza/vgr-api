@@ -401,6 +401,10 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
       media: (await repository.listAttachedMedia(report.id)).map((m) => ({
         publicId: m.publicId,
       })),
+      // DS1 (decisions 200-204): exposed on the public open view too —
+      // the anonymous public feed/detail viewer is explicitly in scope
+      // (204), unlike the resolved `summary` branch above.
+      directionEstimate: await repository.getDirectionEstimateFacet(report.id),
     }
   }
 
@@ -431,6 +435,9 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
     // mark — and never the reason (it is the audit trail's, not theirs).
     hidden: report.hidden,
     chat,
+    // DS1 (decisions 200-204): owner/participant already see everything
+    // else, so this is computed the same way regardless of status.
+    directionEstimate: await repository.getDirectionEstimateFacet(report.id),
     timeline,
     media: (await repository.listAttachedMedia(report.id)).map((m) => ({
       publicId: m.publicId,

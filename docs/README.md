@@ -26,6 +26,7 @@ Index of project technical documentation for **VGR API**. Use the links below to
 | [**rating.md**](./feature/rating.md) | Helper rating on the app plane: the report owner rates one help offer of a resolved case (integer 1..5, once, idempotent by clientKey); the score accumulates on the helper's internal identity; the helper reads only their own `{ count, average }` under the k = 5 floor; Legal Gate capability `helper.rating` (decisions 48, 178-189). | Optional |
 | [**panic.md**](./feature/panic.md) | Panic button PP1: single-shot alert to the Authorized Responder pool, cursor-polled inbox, cooldown anti-abuse, degraded distance, Legal Gate capability `panic.dispatch`; plus the responder-pool `POST` plane fix and the closure of decision 52 (decisions 51, 190-199). | Optional |
 | [**panic-responders.md**](./feature/panic-responders.md) | Superseded — folded into `panic.md`. | Optional |
+| [**direction-sightings.md**](./feature/direction-sightings.md) | Direction sighting DS1: any viewer of an open, eligible-category report logs one of 8 compass directions; synchronous weighted reconciliation (identified weighs more than anonymous), exposed only above a disclosure floor, Legal Gate capability `location.tracking` (decisions 200-207, closing 22/26/27/28). | Optional |
 
 ## Recommended Reading Order
 

@@ -35,6 +35,7 @@ describe('help-matching.service — feed degradation (decisions 21/41/135)', () 
   beforeEach(() => {
     jest.resetAllMocks()
     mockedTier.mockResolvedValue('high')
+    mockedRepository.findDirectionEstimates.mockResolvedValue(new Map())
   })
 
   it('high tier: neighborhood grid, stepped distance, hour-rounded time', async () => {
@@ -64,7 +65,17 @@ describe('help-matching.service — feed degradation (decisions 21/41/135)', () 
     expect(item.position.lat).not.toBe(-23.556789)
     expect(item.position.lng).not.toBe(-46.634567)
     expect(Object.keys(item).sort()).toEqual(
-      ['category', 'createdAt', 'distanceKm', 'freeTag', 'position', 'reportId', 'subject', 'tier'].sort()
+      [
+        'category',
+        'createdAt',
+        'directionEstimate',
+        'distanceKm',
+        'freeTag',
+        'position',
+        'reportId',
+        'subject',
+        'tier',
+      ].sort()
     )
   })
 
@@ -96,5 +107,45 @@ describe('help-matching.service — feed degradation (decisions 21/41/135)', () 
     const page = await feed([row({ category: null, freeTag: 'som alto' })])
     expect(mockedTier).toHaveBeenCalledWith(null)
     expect(page.items[0].freeTag).toBe('som alto')
+  })
+})
+
+/** DS1 (decisions 200-207, 204's "even the anonymous public feed"): the
+ *  feed batches ONE direction-estimate query per page — never one per
+ *  row — the same discipline the risk-tier lookup above already applies
+ *  to categories. */
+describe('help-matching.service — direction estimate facet (DS1, decisions 200-204)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedTier.mockResolvedValue('low')
+    mockedRepository.findDirectionEstimates.mockResolvedValue(new Map())
+  })
+
+  it('attaches { direction } per item from the batched map', async () => {
+    mockedRepository.findDirectionEstimates.mockResolvedValue(
+      new Map([[1, { direction: 'N' as const }]])
+    )
+    const page = await feed([row({ id: 1 })])
+    expect(page.items[0].directionEstimate).toEqual({ direction: 'N' })
+  })
+
+  it('is null for a report absent from the batched map (below the floor, or ineligible)', async () => {
+    mockedRepository.findDirectionEstimates.mockResolvedValue(new Map())
+    const page = await feed([row({ id: 1 })])
+    expect(page.items[0].directionEstimate).toBeNull()
+  })
+
+  it('issues exactly ONE query for the whole page, regardless of page size — never N+1', async () => {
+    const rows = Array.from({ length: 15 }, (_, i) => row({ id: i + 1 }))
+    await feed(rows)
+    expect(mockedRepository.findDirectionEstimates).toHaveBeenCalledTimes(1)
+    expect(mockedRepository.findDirectionEstimates).toHaveBeenCalledWith(
+      expect.arrayContaining(rows.slice(0, 20).map((r) => r.id))
+    )
+  })
+
+  it('skips the query entirely for an EMPTY page — no wasted round-trip', async () => {
+    await feed([])
+    expect(mockedRepository.findDirectionEstimates).not.toHaveBeenCalled()
   })
 })

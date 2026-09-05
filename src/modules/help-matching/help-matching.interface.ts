@@ -1,5 +1,6 @@
 import { Category, Subject } from '@shared/taxonomy/taxonomy'
 import { RiskTier } from '@shared/risk/risk-tier'
+import { Direction } from '@shared/direction-sighting/direction-estimate'
 
 export type FeedOrder = 'recency' | 'relevance'
 
@@ -29,6 +30,11 @@ export interface FeedItem {
   position: { lat: number; lng: number }
   distanceKm: number
   createdAt: string
+  /** DS1 (decisions 200-207): the second place decision 204 requires the
+   *  facet, since the feed IS the anonymous public view — null below the
+   *  disclosure floor (202) or when the category is ineligible (201).
+   *  Never a count, never a distribution (203). */
+  directionEstimate: { direction: Direction } | null
 }
 
 export interface FeedQuery {

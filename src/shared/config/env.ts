@@ -131,6 +131,33 @@ export function chatConfig(): ChatConfig {
   }
 }
 
+/**
+ * Direction sighting limits (DS1 — decisions 202/205). Like the chat
+ * limits above, these are OPERATIONAL numbers, not decision-locked
+ * magic constants: `DIRECTION_SIGHTING_MIN_COUNT` is the disclosure floor
+ * (202 — a report needs at least this many sightings, summed across
+ * every direction, before any READ path exposes an estimate) and the two
+ * `SIGHTING_WEIGHT_*` values are the identified-vs-anonymous multiplier
+ * (27/205) resolved at LOGGING time and stored on the row — changing the
+ * env var later never rewrites history.
+ */
+export interface DirectionSightingConfig {
+  minCount: number
+  weightIdentified: number
+  weightAnonymous: number
+}
+
+export function directionSightingConfig(): DirectionSightingConfig {
+  const minCount = Number(process.env.DIRECTION_SIGHTING_MIN_COUNT ?? 5)
+  const weightIdentified = Number(process.env.SIGHTING_WEIGHT_IDENTIFIED ?? 1.0)
+  const weightAnonymous = Number(process.env.SIGHTING_WEIGHT_ANONYMOUS ?? 0.5)
+  return {
+    minCount: Number.isFinite(minCount) && minCount > 0 ? minCount : 5,
+    weightIdentified: Number.isFinite(weightIdentified) && weightIdentified > 0 ? weightIdentified : 1.0,
+    weightAnonymous: Number.isFinite(weightAnonymous) && weightAnonymous > 0 ? weightAnonymous : 0.5,
+  }
+}
+
 /** Boot-time validation — called by server.ts before listening. */
 export function assertRequiredEnv(): void {
   if (process.env.NODE_ENV !== 'production') return

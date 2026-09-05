@@ -13,13 +13,15 @@ import {
   haversineKm,
   snap,
 } from '@shared/geo/degrade'
+import { Direction } from '@shared/direction-sighting/direction-estimate'
 
 const PAGE_SIZE = 20
 
 function toFeedItem(
   row: NearbyReportRow,
   tier: RiskTier,
-  viewer: { lat: number; lng: number }
+  viewer: { lat: number; lng: number },
+  directionEstimate: { direction: Direction } | null
 ): FeedItem {
   const position = degradePosition(row, tier)
   // Distance derives from the DEGRADED position: a precise distance from
@@ -34,6 +36,7 @@ function toFeedItem(
     position,
     distanceKm: distance,
     createdAt: degradeTimestamp(row.createdAt, tier),
+    directionEstimate,
   }
 }
 
@@ -65,12 +68,23 @@ export async function listNearbyReports(query: FeedQuery): Promise<FeedPage> {
     }
   }
 
+  // DS1 (decisions 200-207): ONE batched query for the whole page — never
+  // one per row (the same discipline the tier lookup above applies to
+  // categories). An empty page skips the call entirely — no wasted
+  // round-trip (mirrors insertRecipients' empty-array no-op elsewhere).
+  const directionEstimates =
+    pageRows.length === 0
+      ? new Map<number, { direction: Direction } | null>()
+      : await repository.findDirectionEstimates(pageRows.map((row) => row.id))
+
   return {
     items: pageRows.map((row) =>
-      toFeedItem(row, tiers.get(row.category ?? '__free_tag') as RiskTier, {
-        lat: query.lat,
-        lng: query.lng,
-      })
+      toFeedItem(
+        row,
+        tiers.get(row.category ?? '__free_tag') as RiskTier,
+        { lat: query.lat, lng: query.lng },
+        directionEstimates.get(row.id) ?? null
+      )
     ),
     page: query.page,
     hasMore,

@@ -7,6 +7,12 @@ import {
   STRATEGY_BY_CATEGORY,
   STRATEGY_BY_CATEGORY_SUBJECT,
 } from '@modules/help-matching/dynamic-radius'
+import {
+  Direction,
+  meetsDisclosureFloor,
+  pickWinningDirection,
+} from '@shared/direction-sighting/direction-estimate'
+import { directionSightingConfig } from '@shared/config/env'
 
 /**
  * The feed query (spec task 05). SQL over tb_report is deliberate — the
@@ -103,4 +109,55 @@ export async function listNearby(
     distanceKm: Number(row.distanceKm),
     radiusKm: Number(row.radiusKm),
   }))
+}
+
+/**
+ * DS1's feed facet (decisions 200-207, 204's "even the anonymous public
+ * feed"): ONE batched query for the whole page — never one per row, the
+ * same discipline listNearbyReports already applies to risk-tier lookups
+ * (help-matching.service.ts's `tiers` Map). SQL over tb_direction_estimate
+ * (owned by direction-sightings) is table access, not a module import —
+ * same posture as listNearby's own tb_report query above. Returns a Map
+ * keyed by reportId; a report absent from the map never had any
+ * sightings, and one present but below the floor maps to `null` — the
+ * caller (help-matching.service.ts) defaults a missing key to null too.
+ */
+export async function findDirectionEstimates(
+  reportIds: number[]
+): Promise<Map<number, { direction: Direction } | null>> {
+  const result = new Map<number, { direction: Direction } | null>()
+  if (reportIds.length === 0) return result
+
+  const placeholders = reportIds.map(() => '?').join(', ')
+  const [rows] = await pool.query<any[]>(
+    `SELECT tb_report_id AS reportId, direction, total_weight AS totalWeight,
+            sighting_count AS sightingCount, first_reported_at AS firstReportedAt
+     FROM tb_direction_estimate
+     WHERE tb_report_id IN (${placeholders})`,
+    reportIds
+  )
+
+  const byReport = new Map<number, Array<{ direction: Direction; totalWeight: number; sightingCount: number; firstReportedAt: Date }>>()
+  for (const row of rows) {
+    const accumulators = byReport.get(row.reportId) ?? []
+    accumulators.push({
+      direction: row.direction as Direction,
+      totalWeight: Number(row.totalWeight),
+      sightingCount: row.sightingCount,
+      firstReportedAt: row.firstReportedAt,
+    })
+    byReport.set(row.reportId, accumulators)
+  }
+
+  const minCount = directionSightingConfig().minCount
+  for (const [reportId, accumulators] of byReport) {
+    if (!meetsDisclosureFloor(accumulators, minCount)) {
+      result.set(reportId, null)
+      continue
+    }
+    const direction = pickWinningDirection(accumulators)
+    result.set(reportId, direction ? { direction } : null)
+  }
+
+  return result
 }

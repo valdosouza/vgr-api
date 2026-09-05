@@ -15,6 +15,7 @@ import mediaRoutes from '@modules/media/media.routes'
 import reportRoutes from '@modules/reports/reports.routes'
 import feedRoutes from '@modules/help-matching/help-matching.routes'
 import helpOfferRoutes from '@modules/help-offers/help-offers.routes'
+import directionSightingRoutes from '@modules/direction-sightings/direction-sightings.routes'
 import rewardRoutes from '@modules/reward/reward.routes'
 import chatRoutes from '@modules/messaging/chat.routes'
 import ratingRoutes, { reportRatingRoutes } from '@modules/ratings/helper-rating.routes'
@@ -127,6 +128,12 @@ app.use('/app-feed', rateLimitMiddleware, feedRoutes)
 
 // Help offers (decisions 10/20/34/35) — anonymous help is a promise.
 app.use('/app-help-offers', rateLimitMiddleware, helpOfferRoutes)
+
+// Direction sighting (DS1 — decisions 200-207): any viewer of an open,
+// eligible-category report may log a sighting, anonymous or identified,
+// except the report's own reporter (self-dealing, 20's posture applied
+// here). Flat route — see direction-sightings.routes.ts's own comment.
+app.use('/app-direction-sightings', rateLimitMiddleware, directionSightingRoutes)
 
 // Reward (decisions 1/30/81-102/143-147) — R0 first slice, monetary
 // guarantee only. Identified account required (appAuthMiddleware, not

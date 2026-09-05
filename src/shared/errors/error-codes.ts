@@ -50,6 +50,10 @@ export const ErrorCodes = {
   PANIC_ALERT_ACTIVE: 'PANIC_ALERT_ACTIVE',
   /** Panic alert resolve called twice (decision 197). HTTP 409. */
   PANIC_ALERT_ALREADY_RESOLVED: 'PANIC_ALERT_ALREADY_RESOLVED',
+  /** Direction sighting (decision 201): the report's category is not one
+   *  of the fixed "things that move" set — a sighting has no meaning for
+   *  it. HTTP 422. */
+  DIRECTION_SIGHTING_NOT_ELIGIBLE: 'DIRECTION_SIGHTING_NOT_ELIGIBLE',
   UNAUTHORIZED: 'UNAUTHORIZED',
   FORBIDDEN: 'FORBIDDEN',
   INTERNAL: 'INTERNAL',

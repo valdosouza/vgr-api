@@ -7,6 +7,7 @@ import type { Category, Subject } from '@shared/taxonomy/taxonomy'
 import type { RiskTier } from '@shared/risk/risk-tier'
 import type { ModerationReason } from '@shared/moderation/moderation-reason'
 import type { StatCount } from '@shared/stats/k-anonymity'
+import type { Direction } from '@shared/direction-sighting/direction-estimate'
 
 export type ReportStatus = 'open' | 'resolved'
 
@@ -148,6 +149,13 @@ export type ReportView =
       detailFields: Record<string, unknown> | null
       createdAt: string
       media: MediaAttachmentView[]
+      /** DS1 (decisions 200-204): the single most-likely direction once
+       *  the report reaches the disclosure floor (202) — null below it or
+       *  when the category is ineligible (201). NEVER a count, NEVER a
+       *  distribution (203). Present on `public` and `owner`/`participant`
+       *  — absent on `summary` (204: that tier already carries no other
+       *  detail). */
+      directionEstimate: { direction: Direction } | null
     }
   | {
       access: 'participant' | 'owner'
@@ -173,6 +181,10 @@ export type ReportView =
        *  thread id (null before the first message) and unread. Never on
        *  the public/summary views. */
       chat: OwnerChatSummary | HelperChatSummary
+      /** DS1 (decisions 200-204) — same facet as the `public` branch
+       *  above; owner/participant already see everything else, so this is
+       *  computed the same way regardless of report status. */
+      directionEstimate: { direction: Direction } | null
     }
 
 export interface OwnerChatSummary {
