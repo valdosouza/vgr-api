@@ -16,6 +16,7 @@ import {
   ThreadSummary,
 } from '@modules/messaging/chat.interface'
 import { appendAccountabilityLogEntry } from '@shared/audit/accountability'
+import { ownsByAccountOrKey } from '@shared/auth/ownership'
 import { findContact } from '@shared/chat/contact-filter'
 import { chatConfig } from '@shared/config/env'
 import { ErrorCodes, FieldErrorCodes } from '@shared/errors/error-codes'
@@ -41,10 +42,9 @@ const RATE_WINDOW_SECONDS = 60
 const notFound = () => new HttpError(404, 'Thread not found', undefined, ErrorCodes.NOT_FOUND)
 
 /** Ownership as reports.service defines it: account match OR the bearer
- *  clientKey (decision 134 pattern). */
+ *  clientKey (decision 134 pattern) — one rule in shared/auth/ownership. */
 function owns(report: ChatReportRow, viewer: ChatViewer): boolean {
-  if (viewer.accountId !== null && report.reporterAccountId === viewer.accountId) return true
-  return viewer.clientKey !== null && report.clientKey === viewer.clientKey
+  return ownsByAccountOrKey({ accountId: report.reporterAccountId, clientKey: report.clientKey }, viewer)
 }
 
 /** Decision 173: resolved (18/131) or hidden (162) closes writes, reads

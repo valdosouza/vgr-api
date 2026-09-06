@@ -67,9 +67,10 @@ export function isKnownCapability(key: string): key is Capability {
 
 /**
  * Guard 2 of decision 103: a cataloged capability with no caller is debt,
- * not protection. The domain features that consume the gate (report,
- * reward, panic dispatch) are still unbuilt — every entry below is awaiting
- * its consumer. capabilities.catalog.spec.ts asserts that PENDING_WIRING
+ * not protection. The entries still listed below are the ones awaiting
+ * their consumer; every capability wired since (report, reward, chat,
+ * rating, panic, direction sightings) was removed from the set, as the
+ * notes inside it record. capabilities.catalog.spec.ts asserts that PENDING_WIRING
  * plus the actually-called capabilities exactly partition the catalog, so
  * an entry can never silently be neither wired nor declared pending.
  * When a domain task wires a capability, it MUST remove the entry here —

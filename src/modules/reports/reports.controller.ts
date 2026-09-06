@@ -6,18 +6,18 @@ import {
   reportMediaVariantDto,
   submitReportDto,
 } from '@modules/reports/reports.dto'
+import { ViewerContext } from '@modules/reports/reports.interface'
+import { appActorOf } from '@shared/http/app-actor'
 import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
 import { ErrorCodes } from '@shared/errors/error-codes'
 
-/** Viewer identity for ownership checks (R3): the session account and/or
- *  the bearer clientKey (decision 134's pattern) — sent as a header, never
- *  a URL parameter (a URL leaks into logs and referrers). */
-function viewerOf(req: Request) {
-  const header = req.headers['x-client-key']
-  return {
-    accountId: req.appAccountId ?? null,
-    clientKey: typeof header === 'string' && header.length > 0 ? header : null,
-  }
+/** Viewer identity for ownership checks (R3): the app actor of
+ *  shared/http/app-actor — the session account and/or the bearer
+ *  clientKey (decision 134's pattern; a header, never a URL parameter) —
+ *  minus the IP, which the service takes separately where it needs it. */
+function viewerOf(req: Request): ViewerContext {
+  const { accountId, clientKey } = appActorOf(req)
+  return { accountId, clientKey }
 }
 
 export async function submit(req: Request, res: Response): Promise<void> {

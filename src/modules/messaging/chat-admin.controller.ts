@@ -2,8 +2,7 @@ import { Request, Response } from 'express'
 import * as service from '@modules/messaging/chat-admin.service'
 import { chatEvidenceQueryDto } from '@modules/messaging/chat.dto'
 import { auditFromRequest } from '@shared/audit/admin-audit'
-import { ErrorCodes } from '@shared/errors/error-codes'
-import { handleError, parseId, zodToFields } from '@shared/http/controller-utils'
+import { handleError, parseId, parseQuery } from '@shared/http/controller-utils'
 
 /**
  * Panel plane of the chat (C3 — decision 175). The read is audited HERE,
@@ -17,16 +16,9 @@ export async function chatEvidence(req: Request, res: Response): Promise<void> {
   try {
     const id = parseId(req, res)
     if (id === null) return
-    const parsed = chatEvidenceQueryDto.safeParse(req.query)
-    if (!parsed.success) {
-      res.status(422).json({
-        error: 'Validation failed',
-        code: ErrorCodes.VALIDATION_FAILED,
-        fields: zodToFields(parsed.error),
-      })
-      return
-    }
-    const result = await service.getReportChatEvidence(id, parsed.data)
+    const query = parseQuery(chatEvidenceQueryDto, req, res)
+    if (query === null) return
+    const result = await service.getReportChatEvidence(id, query)
     auditFromRequest(req, 'read', 'report_chat', id)
     // No caching: a cached chat would be an unaudited read (159 pattern).
     res.setHeader('Cache-Control', 'no-store')

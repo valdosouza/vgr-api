@@ -1,32 +1,14 @@
 import { Request, Response } from 'express'
 import * as service from '@modules/ratings/helper-rating.service'
 import { rateHelperDto } from '@modules/ratings/helper-rating.dto'
-import { RatingActor } from '@modules/ratings/helper-rating.interface'
-import { ErrorCodes } from '@shared/errors/error-codes'
-import { handleError, parseBody } from '@shared/http/controller-utils'
+import { appActorOf } from '@shared/http/app-actor'
+import { handleError, parseBody, parseIdParam } from '@shared/http/controller-utils'
 
-/** Actor identity exactly as reports and chat build it: the session
- *  account and/or the report's bearer clientKey — a HEADER, never a URL
- *  parameter (a URL leaks into logs and referrers). */
-function actorOf(req: Request): RatingActor {
-  const header = req.headers['x-client-key']
-  return {
-    accountId: req.appAccountId ?? null,
-    clientKey: typeof header === 'string' && header.length > 0 ? header : null,
-    ip: req.ip ?? '',
-  }
-}
-
-/** parseId for a named route parameter (:reportId / :offerId), merged
- *  from the mount path in app.ts. */
-function parseIdParam(req: Request, res: Response, name: string): number | null {
-  const id = Number(req.params[name])
-  if (!Number.isInteger(id) || id < 0) {
-    res.status(400).json({ error: 'Invalid id', code: ErrorCodes.INVALID_ID })
-    return null
-  }
-  return id
-}
+/** The rater is the app actor of shared/http/app-actor (RatingActor is
+ *  that shape): the session account and/or the report's bearer clientKey
+ *  — a HEADER, never a URL parameter (a URL leaks into logs and
+ *  referrers). Route ids (:reportId / :offerId) come through parseIdParam,
+ *  merged from the mount path in app.ts. */
 
 export async function rate(req: Request, res: Response): Promise<void> {
   try {
@@ -36,7 +18,7 @@ export async function rate(req: Request, res: Response): Promise<void> {
     if (offerId === null) return
     const body = parseBody(rateHelperDto, req, res)
     if (body === null) return
-    const { replayed, ...rating } = await service.rateHelper(reportId, offerId, body, actorOf(req))
+    const { replayed, ...rating } = await service.rateHelper(reportId, offerId, body, appActorOf(req))
     // Replay of the offline queue answers 200 with the SAME rating
     // (decisions 137/183, the reports.submit convention) — the client
     // cannot tell a retry from a first accept, and that is the point.

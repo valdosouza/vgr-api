@@ -11,6 +11,7 @@ import {
 } from '@modules/reports/reports.interface'
 import { CATEGORIES } from '@shared/taxonomy/taxonomy'
 import { appendAccountabilityLogEntry } from '@shared/audit/accountability'
+import { ownsByAccountOrKey } from '@shared/auth/ownership'
 import {
   FieldDefinition,
   getCategoryFormSchema,
@@ -138,10 +139,10 @@ export async function getCategoryForms(): Promise<
 
 /** Ownership (R3): the account matches, OR the viewer presents the
  *  report's clientKey — the bearer-secret pattern of decision 134: the
- *  anonymous reporter's app kept the key it generated (137). */
+ *  anonymous reporter's app kept the key it generated (137). The rule is
+ *  shared/auth/ownership's; only the column mapping is local. */
 function owns(report: ReportRow, viewer: ViewerContext): boolean {
-  if (viewer.accountId !== null && report.reporterAccountId === viewer.accountId) return true
-  return viewer.clientKey !== null && report.clientKey === viewer.clientKey
+  return ownsByAccountOrKey({ accountId: report.reporterAccountId, clientKey: report.clientKey }, viewer)
 }
 
 const notFound = () => new HttpError(404, 'Report not found', undefined, ErrorCodes.NOT_FOUND)

@@ -31,7 +31,13 @@ export function handleError(res: Response, err: unknown, ctx: string): void {
 
 /** Validates the route's :id; responds 400 and returns null if invalid. */
 export function parseId(req: Request, res: Response): number | null {
-  const id = Number(req.params.id)
+  return parseIdParam(req, res, 'id')
+}
+
+/** parseId for a NAMED route parameter (:reportId / :threadId / :offerId,
+ *  merged from the mount path) — same rule, same 400 envelope. */
+export function parseIdParam(req: Request, res: Response, name: string): number | null {
+  const id = Number(req.params[name])
   if (!Number.isInteger(id) || id < 0) {
     res.status(400).json({ error: 'Invalid id', code: ErrorCodes.INVALID_ID })
     return null
@@ -78,17 +84,10 @@ export function zodToFields(error: z.ZodError): FieldError[] {
   }))
 }
 
-/**
- * Validates the body against the Zod schema; responds 400
- * `{ error, fields[] }` and returns null if invalid. Usage:
- * `const body = parseBody(dto, req, res); if (body === null) return`.
- */
-export function parseBody<S extends z.ZodTypeAny>(
-  schema: S,
-  req: Request,
-  res: Response
-): z.infer<S> | null {
-  const parsed = schema.safeParse(req.body)
+/** The one place the 422 VALIDATION_FAILED envelope is emitted — parseBody
+ *  and parseQuery differ only in WHICH part of the request they validate. */
+function parseWith<S extends z.ZodTypeAny>(schema: S, value: unknown, res: Response): z.infer<S> | null {
+  const parsed = schema.safeParse(value)
   if (!parsed.success) {
     // 422, not 400 (amended per docs/specs/vgr/004-api-test-scenarios.md,
     // which consistently expects 422 for semantic validation failures —
@@ -101,4 +100,31 @@ export function parseBody<S extends z.ZodTypeAny>(
     return null
   }
   return parsed.data
+}
+
+/**
+ * Validates the body against the Zod schema; responds 422
+ * `{ error, code, fields[] }` and returns null if invalid. Usage:
+ * `const body = parseBody(dto, req, res); if (body === null) return`.
+ */
+export function parseBody<S extends z.ZodTypeAny>(
+  schema: S,
+  req: Request,
+  res: Response
+): z.infer<S> | null {
+  return parseWith(schema, req.body, res)
+}
+
+/**
+ * parseBody's twin for the query string: validates `req.query` against the
+ * Zod schema with the SAME 422 envelope, so a list/feed filter error
+ * translates by the same field codes as a form error. Usage:
+ * `const query = parseQuery(dto, req, res); if (query === null) return`.
+ */
+export function parseQuery<S extends z.ZodTypeAny>(
+  schema: S,
+  req: Request,
+  res: Response
+): z.infer<S> | null {
+  return parseWith(schema, req.query, res)
 }

@@ -1,8 +1,7 @@
 import { Request, Response } from 'express'
 import * as service from '@modules/admin-audit/admin-audit.service'
 import { auditListQueryDto } from '@modules/admin-audit/admin-audit.dto'
-import { handleError, parseId, zodToFields } from '@shared/http/controller-utils'
-import { ErrorCodes } from '@shared/errors/error-codes'
+import { handleError, parseId, parseQuery } from '@shared/http/controller-utils'
 
 /**
  * Trail READ on the panel plane (B5 — decisions 116/165/166). Every
@@ -13,16 +12,9 @@ import { ErrorCodes } from '@shared/errors/error-codes'
 
 export async function list(req: Request, res: Response): Promise<void> {
   try {
-    const parsed = auditListQueryDto.safeParse(req.query)
-    if (!parsed.success) {
-      res.status(422).json({
-        error: 'Validation failed',
-        code: ErrorCodes.VALIDATION_FAILED,
-        fields: zodToFields(parsed.error),
-      })
-      return
-    }
-    res.json(await service.listAuditEntries(parsed.data))
+    const query = parseQuery(auditListQueryDto, req, res)
+    if (query === null) return
+    res.json(await service.listAuditEntries(query))
   } catch (err) {
     handleError(res, err, 'admin-audit.list')
   }

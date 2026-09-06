@@ -10,6 +10,7 @@ import {
   TriggerPanicAlertResult,
 } from '@modules/panic/panic-alert.interface'
 import { appendAccountabilityLogEntry } from '@shared/audit/accountability'
+import { AccountOrKeyActor, ownsByAccountOrKey } from '@shared/auth/ownership'
 import { ErrorCodes } from '@shared/errors/error-codes'
 import { HttpError } from '@shared/errors/http-error'
 import { Capabilities } from '@shared/legal/capabilities'
@@ -28,12 +29,13 @@ import logger from '@shared/logger/logger'
 const notFound = () => new HttpError(404, 'Panic alert not found', undefined, ErrorCodes.NOT_FOUND)
 
 /** Ownership as reports.service defines it: account match OR the bearer
- *  clientKey (decision 134 pattern) — the same shape trigger uses to
- *  identify the caller, reused here so resolve recognizes the same
- *  person who triggered (197: only the triggerer may resolve). */
-function owns(alert: PanicAlertRow, actor: { accountId: number | null; clientKey: string | null }): boolean {
-  if (actor.accountId !== null && alert.accountId === actor.accountId) return true
-  return actor.clientKey !== null && alert.clientKey === actor.clientKey
+ *  clientKey (decision 134 pattern — one rule in shared/auth/ownership)
+ *  — the same shape trigger uses to identify the caller, reused here so
+ *  resolve recognizes the same person who triggered (197: only the
+ *  triggerer may resolve). The alert row already carries the shared
+ *  owner shape (accountId + clientKey), so no mapping is needed. */
+function owns(alert: PanicAlertRow, actor: AccountOrKeyActor): boolean {
+  return ownsByAccountOrKey(alert, actor)
 }
 
 function toTriggerResult(

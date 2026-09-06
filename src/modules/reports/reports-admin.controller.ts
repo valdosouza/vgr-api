@@ -7,9 +7,8 @@ import {
   reportSearchQueryDto,
   reportStatsQueryDto,
 } from '@modules/reports/reports-admin.dto'
-import { handleError, parseBody, parseId, zodToFields } from '@shared/http/controller-utils'
+import { handleError, parseBody, parseId, parseQuery } from '@shared/http/controller-utils'
 import { auditFromRequest } from '@shared/audit/admin-audit'
-import { ErrorCodes } from '@shared/errors/error-codes'
 import { moderationReasonDto } from '@shared/moderation/moderation-reason'
 
 /**
@@ -21,16 +20,9 @@ import { moderationReasonDto } from '@shared/moderation/moderation-reason'
 
 export async function search(req: Request, res: Response): Promise<void> {
   try {
-    const parsed = reportSearchQueryDto.safeParse(req.query)
-    if (!parsed.success) {
-      res.status(422).json({
-        error: 'Validation failed',
-        code: ErrorCodes.VALIDATION_FAILED,
-        fields: zodToFields(parsed.error),
-      })
-      return
-    }
-    res.json(await service.searchReports(parsed.data))
+    const query = parseQuery(reportSearchQueryDto, req, res)
+    if (query === null) return
+    res.json(await service.searchReports(query))
   } catch (err) {
     handleError(res, err, 'reports-admin.search')
   }
@@ -44,16 +36,9 @@ export async function search(req: Request, res: Response): Promise<void> {
  */
 export async function stats(req: Request, res: Response): Promise<void> {
   try {
-    const parsed = reportStatsQueryDto.safeParse(req.query)
-    if (!parsed.success) {
-      res.status(422).json({
-        error: 'Validation failed',
-        code: ErrorCodes.VALIDATION_FAILED,
-        fields: zodToFields(parsed.error),
-      })
-      return
-    }
-    res.json(await statsService.getReportStats(parsed.data))
+    const query = parseQuery(reportStatsQueryDto, req, res)
+    if (query === null) return
+    res.json(await statsService.getReportStats(query))
   } catch (err) {
     handleError(res, err, 'reports-admin.stats')
   }
@@ -66,16 +51,9 @@ export async function stats(req: Request, res: Response): Promise<void> {
  */
 export async function queue(req: Request, res: Response): Promise<void> {
   try {
-    const parsed = reportQueueQueryDto.safeParse(req.query)
-    if (!parsed.success) {
-      res.status(422).json({
-        error: 'Validation failed',
-        code: ErrorCodes.VALIDATION_FAILED,
-        fields: zodToFields(parsed.error),
-      })
-      return
-    }
-    res.json(await queueService.getModerationQueue(parsed.data))
+    const query = parseQuery(reportQueueQueryDto, req, res)
+    if (query === null) return
+    res.json(await queueService.getModerationQueue(query))
   } catch (err) {
     handleError(res, err, 'reports-admin.queue')
   }

@@ -8,6 +8,7 @@ import {
   RatingReportRow,
 } from '@modules/ratings/helper-rating.interface'
 import { appendAccountabilityLogEntry } from '@shared/audit/accountability'
+import { ownsByAccountOrKey } from '@shared/auth/ownership'
 import { ErrorCodes } from '@shared/errors/error-codes'
 import { HttpError } from '@shared/errors/http-error'
 import { Capabilities } from '@shared/legal/capabilities'
@@ -27,11 +28,11 @@ import logger from '@shared/logger/logger'
 const notFound = () => new HttpError(404, 'Report not found', undefined, ErrorCodes.NOT_FOUND)
 
 /** Ownership as reports.service defines it: account match OR the bearer
- *  clientKey (decision 134 pattern). Non-owners get 404, never 403 (20:
- *  the helper never rates; 55: existence is information). */
+ *  clientKey (decision 134 pattern — one rule in shared/auth/ownership).
+ *  Non-owners get 404, never 403 (20: the helper never rates; 55:
+ *  existence is information). */
 function owns(report: RatingReportRow, actor: RatingActor): boolean {
-  if (actor.accountId !== null && report.reporterAccountId === actor.accountId) return true
-  return actor.clientKey !== null && report.clientKey === actor.clientKey
+  return ownsByAccountOrKey({ accountId: report.reporterAccountId, clientKey: report.clientKey }, actor)
 }
 
 /** HelperRated minus helperInternalId (48/60): ids and the score only. */
