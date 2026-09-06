@@ -48,7 +48,10 @@ app.use((req, res, next) => {
     res.setHeader('Vary', 'Origin')
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  // x-client-key is the anonymous owner's bearer secret (decision 134) —
+  // a custom header, so browsers preflight it; without it here every
+  // owner/participant call from the web target fails at the preflight.
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-client-key')
   if (req.method === 'OPTIONS') {
     res.sendStatus(204)
     return
