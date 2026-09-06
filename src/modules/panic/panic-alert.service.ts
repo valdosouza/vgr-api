@@ -66,10 +66,11 @@ function toTriggerResult(
  *     anonymous reports never being identity-rate-limited, only IP-rate-
  *     limited by the shared per-IP limiter already wrapping /app-panic).
  *  3. Legal Gate before any write (451) — `panic.dispatch`.
- *  4. Snapshot the CURRENT active responder pool and insert; an EMPTY
- *     pool is NEVER a refusal (65, the plan's success criterion 2) — the
- *     alert is created regardless, with zero recipients if that is what
- *     the pool happens to be.
+ *  4. Snapshot the CURRENT active responder pool and insert the alert
+ *     WITH that snapshot in ONE transaction (a failure in either write
+ *     leaves nothing behind); an EMPTY pool is NEVER a refusal (65, the
+ *     plan's success criterion 2) — the alert is created regardless,
+ *     with zero recipients if that is what the pool happens to be.
  *  5. Accountability for the anonymous triggerer (23), never blocking
  *     (123) — pattern of help_offer.submit.
  */
@@ -104,14 +105,17 @@ export async function triggerAlert(
   // keeps the trusted-contact union member out of this round).
   const responders = await responderPoolService.findActiveResponders()
 
-  const alert = await repository.insertAlert({
-    clientKey: input.clientKey,
-    accountId: actor.accountId,
-    lat: input.lat,
-    lng: input.lng,
-  })
-  await repository.insertRecipients(
-    alert.id,
+  // ONE transaction: the alert and its recipient snapshot commit together
+  // or not at all — a failed snapshot must never orphan an active alert
+  // the client never learned the id of (it could never resolve it, and an
+  // identified account would then hit the 198 cooldown on every trigger).
+  const alert = await repository.insertAlertWithRecipients(
+    {
+      clientKey: input.clientKey,
+      accountId: actor.accountId,
+      lat: input.lat,
+      lng: input.lng,
+    },
     responders.map((responder) => responder.userId)
   )
 

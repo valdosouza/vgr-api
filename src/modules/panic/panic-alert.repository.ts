@@ -53,38 +53,52 @@ export async function findAlertById(id: number): Promise<PanicAlertRow | null> {
   return rows[0] ? toAlert(rows[0]) : null
 }
 
-/** Insert then read back — the same pattern insertMessage/insertRating
- *  use to hand the caller a fully-typed row including created_at. */
-export async function insertAlert(input: {
-  clientKey: string
-  accountId: number | null
-  lat: number
-  lng: number
-}): Promise<PanicAlertRow> {
-  const [result] = await pool.query<any>(
-    `INSERT INTO tb_panic_alert (client_key, account_id, lat, lng, status)
-     VALUES (?, ?, ?, ?, 'active')`,
-    [input.clientKey, input.accountId, input.lat, input.lng]
-  )
-  const [rows] = await pool.query<any[]>(`${ALERT_SELECT} WHERE id = ?`, [result.insertId])
-  return toAlert(rows[0])
-}
-
 /**
- * Snapshot the pool AT TRIGGER TIME (decision 65's "never blocked waiting
- * on configuration" plus the plan's success criterion 2): an EMPTY list
- * is a valid, expected input — the caller decides whether to call this at
- * all, this function just accepts whatever it is handed, including zero
- * rows, without complaint.
+ * Insert the alert AND its trigger-time recipient snapshot in ONE
+ * transaction, then read the alert back (the insert-then-read-back shape
+ * insertMessage/insertRating use, so the caller gets a fully-typed row
+ * including created_at). Mirrors direction-sightings' insertSighting and
+ * chat's insertThreadWithParticipants: a failure in either statement
+ * rolls the whole thing back, so an `active` alert is never left behind
+ * that the client never learned the id of — with two separate
+ * statements, a failing recipient insert orphaned the alert and, for an
+ * identified account, jammed every later trigger on the 198 cooldown.
+ *
+ * The snapshot is taken AT TRIGGER TIME (decision 65's "never blocked
+ * waiting on configuration" plus the plan's success criterion 2): an
+ * EMPTY list is a valid, expected input — no recipient statement is
+ * issued and the alert still commits.
  */
-export async function insertRecipients(alertId: number, responderAccountIds: number[]): Promise<void> {
-  if (responderAccountIds.length === 0) return
-  const values = responderAccountIds.map(() => '(?, ?)').join(', ')
-  const params = responderAccountIds.flatMap((responderAccountId) => [alertId, responderAccountId])
-  await pool.query(
-    `INSERT INTO tb_panic_alert_recipient (tb_panic_alert_id, responder_account_id) VALUES ${values}`,
-    params
-  )
+export async function insertAlertWithRecipients(
+  input: { clientKey: string; accountId: number | null; lat: number; lng: number },
+  responderAccountIds: number[]
+): Promise<PanicAlertRow> {
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    const [result] = await conn.query<any>(
+      `INSERT INTO tb_panic_alert (client_key, account_id, lat, lng, status)
+       VALUES (?, ?, ?, ?, 'active')`,
+      [input.clientKey, input.accountId, input.lat, input.lng]
+    )
+    const alertId: number = result.insertId
+    if (responderAccountIds.length > 0) {
+      const values = responderAccountIds.map(() => '(?, ?)').join(', ')
+      const params = responderAccountIds.flatMap((responderAccountId) => [alertId, responderAccountId])
+      await conn.query(
+        `INSERT INTO tb_panic_alert_recipient (tb_panic_alert_id, responder_account_id) VALUES ${values}`,
+        params
+      )
+    }
+    const [rows] = await conn.query<any[]>(`${ALERT_SELECT} WHERE id = ?`, [alertId])
+    await conn.commit()
+    return toAlert(rows[0])
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
+  }
 }
 
 export async function countRecipients(alertId: number): Promise<number> {

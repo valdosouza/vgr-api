@@ -63,8 +63,7 @@ describe('panic-alert.service', () => {
     jest.resetAllMocks()
     mockedRepository.findAlertByClientKey.mockResolvedValue(null)
     mockedRepository.findActiveAlertByAccount.mockResolvedValue(null)
-    mockedRepository.insertAlert.mockResolvedValue(alert())
-    mockedRepository.insertRecipients.mockResolvedValue(undefined)
+    mockedRepository.insertAlertWithRecipients.mockResolvedValue(alert())
     mockedRepository.countRecipients.mockResolvedValue(0)
     mockedRepository.resolveAlert.mockResolvedValue(true)
     mockedResponderPool.findActiveResponders.mockResolvedValue([])
@@ -78,7 +77,7 @@ describe('panic-alert.service', () => {
         member({ userId: 8 }),
         member({ userId: 9 }),
       ])
-      mockedRepository.insertAlert.mockResolvedValue(alert({ accountId: 42 }))
+      mockedRepository.insertAlertWithRecipients.mockResolvedValue(alert({ accountId: 42 }))
 
       const result = await service.triggerAlert(INPUT, IDENTIFIED)
 
@@ -88,13 +87,11 @@ describe('panic-alert.service', () => {
         recipientCount: 2,
         replayed: false,
       })
-      expect(mockedRepository.insertAlert).toHaveBeenCalledWith({
-        clientKey: CLIENT_KEY,
-        accountId: 42,
-        lat: INPUT.lat,
-        lng: INPUT.lng,
-      })
-      expect(mockedRepository.insertRecipients).toHaveBeenCalledWith(501, [8, 9])
+      // ONE transactional write: the alert AND its trigger-time snapshot.
+      expect(mockedRepository.insertAlertWithRecipients).toHaveBeenCalledWith(
+        { clientKey: CLIENT_KEY, accountId: 42, lat: INPUT.lat, lng: INPUT.lng },
+        [8, 9]
+      )
       // An identified triggerer leaves no accountability entry — the
       // session itself is the trail (pattern of rateHelper/help_offer).
       expect(mockedAccountability).not.toHaveBeenCalled()
@@ -102,14 +99,15 @@ describe('panic-alert.service', () => {
 
     it('creates an alert for an ANONYMOUS caller (clientKey only) and leaves the accountability trail', async () => {
       mockedResponderPool.findActiveResponders.mockResolvedValue([member({ userId: 8 })])
-      mockedRepository.insertAlert.mockResolvedValue(alert({ accountId: null }))
+      mockedRepository.insertAlertWithRecipients.mockResolvedValue(alert({ accountId: null }))
 
       const result = await service.triggerAlert(INPUT, ANONYMOUS)
 
       expect(result.replayed).toBe(false)
       expect(result.recipientCount).toBe(1)
-      expect(mockedRepository.insertAlert).toHaveBeenCalledWith(
-        expect.objectContaining({ accountId: null })
+      expect(mockedRepository.insertAlertWithRecipients).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: null }),
+        [8]
       )
       // Decision 23: the id only, NEVER the position.
       expect(mockedAccountability).toHaveBeenCalledWith('panic_alert.trigger', IP, { alertId: 501 })
@@ -121,8 +119,10 @@ describe('panic-alert.service', () => {
       const result = await service.triggerAlert(INPUT, IDENTIFIED)
 
       expect(result.recipientCount).toBe(0)
-      expect(mockedRepository.insertAlert).toHaveBeenCalled()
-      expect(mockedRepository.insertRecipients).toHaveBeenCalledWith(501, [])
+      expect(mockedRepository.insertAlertWithRecipients).toHaveBeenCalledWith(
+        expect.objectContaining({ clientKey: CLIENT_KEY }),
+        []
+      )
     })
 
     it('replays the SAME alert on a repeated clientKey — re-derives recipientCount, never re-inserts', async () => {
@@ -137,7 +137,7 @@ describe('panic-alert.service', () => {
         recipientCount: 3,
         replayed: true,
       })
-      expect(mockedRepository.insertAlert).not.toHaveBeenCalled()
+      expect(mockedRepository.insertAlertWithRecipients).not.toHaveBeenCalled()
       expect(mockedGate).not.toHaveBeenCalled()
       expect(mockedResponderPool.findActiveResponders).not.toHaveBeenCalled()
     })
@@ -149,7 +149,7 @@ describe('panic-alert.service', () => {
         await expect(service.triggerAlert({ ...INPUT, clientKey: OTHER_KEY }, IDENTIFIED)).rejects.toMatchObject(
           { statusCode: 409, code: ErrorCodes.PANIC_ALERT_ACTIVE }
         )
-        expect(mockedRepository.insertAlert).not.toHaveBeenCalled()
+        expect(mockedRepository.insertAlertWithRecipients).not.toHaveBeenCalled()
         expect(mockedGate).not.toHaveBeenCalled()
       })
 
@@ -159,7 +159,7 @@ describe('panic-alert.service', () => {
         const result = await service.triggerAlert({ ...INPUT, clientKey: OTHER_KEY }, IDENTIFIED)
 
         expect(result.replayed).toBe(false)
-        expect(mockedRepository.insertAlert).toHaveBeenCalled()
+        expect(mockedRepository.insertAlertWithRecipients).toHaveBeenCalled()
       })
 
       it('never cooldown-checks an ANONYMOUS caller — a fresh clientKey is a fresh identity by design, so findActiveAlertByAccount is never called', async () => {
@@ -181,7 +181,7 @@ describe('panic-alert.service', () => {
         statusCode: 451,
         code: ErrorCodes.LEGAL_BLOCKED,
       })
-      expect(mockedRepository.insertAlert).not.toHaveBeenCalled()
+      expect(mockedRepository.insertAlertWithRecipients).not.toHaveBeenCalled()
       expect(mockedResponderPool.findActiveResponders).not.toHaveBeenCalled()
       expect(mockedAccountability).not.toHaveBeenCalled()
     })
@@ -203,6 +203,17 @@ describe('panic-alert.service', () => {
       expect(result.replayed).toBe(false)
       expect(loggerSpy).toHaveBeenCalled()
       loggerSpy.mockRestore()
+    })
+
+    it('surfaces a failed write and leaves NO accountability entry — the rolled-back alert has no id to account for', async () => {
+      mockedResponderPool.findActiveResponders.mockResolvedValue([member({ userId: 8 })])
+      mockedRepository.insertAlertWithRecipients.mockRejectedValue(new Error('FK failed'))
+
+      await expect(service.triggerAlert(INPUT, ANONYMOUS)).rejects.toThrow('FK failed')
+
+      // The caller must see the failure (500 via handleError), never a
+      // fake success, and nothing may claim an alert that does not exist.
+      expect(mockedAccountability).not.toHaveBeenCalled()
     })
   })
 

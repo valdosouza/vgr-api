@@ -119,9 +119,10 @@ Ordering encodes the product's principles, as `submitReport`/chat
 3. **Legal Gate (51/190-199)** — `assertCapability('panic.dispatch', {
    userRef: account | undefined, ip })` → 451 before any write.
 4. **Snapshot + insert** — `responderPoolService.findActiveResponders()`
-   is read AFTER the gate passes; `insertAlert` then `insertRecipients`
-   (empty array is a no-op, not an error) — an empty pool never refuses
-   the trigger (65).
+   is read AFTER the gate passes; `insertAlertWithRecipients(alert,
+   responderIds)` writes the alert AND the recipient snapshot in ONE
+   transaction (an empty array skips the recipient statement, never the
+   commit) — an empty pool never refuses the trigger (65).
 5. **Accountability (23)** — the ANONYMOUS triggerer leaves
    `panic_alert.trigger` with `{ alertId }` (never the position), logged
    on failure, never blocking (123) — the pattern of `help_offer.submit`.
@@ -162,6 +163,17 @@ trigger time. `GET /app-panic/alerts` is a lookup against this table —
 never a live membership re-check — so a responder approved AFTER an
 alert fired never sees it retroactively.
 
+Both writes (the alert insert and the recipient snapshot) happen in ONE
+transaction (`panic-alert.repository.ts`'s `insertAlertWithRecipients`,
+mirrors `direction-sightings.repository.ts`'s `insertSighting` and
+`chat.repository.ts`'s `insertThreadWithParticipants`): a failure in
+either leaves nothing behind. The first end-to-end run (2026-09-06)
+showed why: as two separate statements, a failing recipient insert left
+an orphaned `active` alert whose id the client never received (it got a
+500), so nobody could ever resolve it — and for an identified account
+every later trigger then hit the 198 cooldown's 409 `PANIC_ALERT_ACTIVE`
+with no way out.
+
 `panic.dispatch` was already seeded by migration `022_legal_gate.sql` at
 the capability catalog's founding (it sat in `PENDING_WIRING` since);
 migration 046 wires no new seed row — it only removes the
@@ -194,14 +206,17 @@ behavior, comment updated), `panic-alert.service.spec` (idempotent
 replay recomputes `recipientCount`; identified vs anonymous trigger;
 empty-pool trigger still 201; cooldown fires only for an identified
 caller and never for anonymous; gate ordering and 451 with no write;
-accountability only for the anonymous triggerer, never blocking;
+accountability only for the anonymous triggerer, never blocking; a
+failed transactional write surfaces with no accountability entry;
 `listAlertsForResponder` distance rounding and no raw lat/lng; resolve
 ownership by account/clientKey, 404 for non-owner/missing, 409 on double
 resolve), `panic-alert.repository.spec` (every SQL contract: idempotency
-lookup, cooldown lookup gated on `status='active'`, insert-then-read-back,
-bulk recipient insert incl. the empty-array no-op, atomic resolve WHERE
-clause, the inbox JOIN/cursor/order), `panic-alert.routes.spec` (full
-HTTP surface: 201/200/409/422/451/401/404/400 envelopes, the extra
+lookup, cooldown lookup gated on `status='active'`, the one-transaction
+alert insert + bulk recipient snapshot + read-back + commit incl. the
+empty-pool commit with no recipient statement and rollback + release
+when the recipient insert fails, atomic resolve WHERE clause, the inbox
+JOIN/cursor/order), `panic-alert.routes.spec` (full HTTP surface:
+201/200/409/422/451/500/401/404/400 envelopes, the extra
 `message` field in the trigger body is accepted and ignored — never
 stored or echoed, cursor forwarding, never mounted under `/api`),
 `capabilities.catalog.spec` (`panic.dispatch` WIRED and still correctly

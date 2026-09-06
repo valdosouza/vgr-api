@@ -72,8 +72,7 @@ describe('/app-panic routes (PP1 — decisions 51/65/191-198)', () => {
     mockedResponderPool.findActiveResponders.mockResolvedValue([])
     mockedRepository.findAlertByClientKey.mockResolvedValue(null)
     mockedRepository.findActiveAlertByAccount.mockResolvedValue(null)
-    mockedRepository.insertAlert.mockResolvedValue(alert())
-    mockedRepository.insertRecipients.mockResolvedValue(undefined)
+    mockedRepository.insertAlertWithRecipients.mockResolvedValue(alert())
     mockedRepository.countRecipients.mockResolvedValue(0)
     mockedRepository.resolveAlert.mockResolvedValue(true)
     mockedRepository.findAlertById.mockResolvedValue(null)
@@ -87,7 +86,7 @@ describe('/app-panic routes (PP1 — decisions 51/65/191-198)', () => {
       mockedResponderPool.findActiveResponders.mockResolvedValue([
         { id: 1, userId: 8, status: 'approved', criteriaNotes: null, requestedAt: new Date(), resolvedAt: new Date(), resolvedBy: 7 },
       ])
-      mockedRepository.insertAlert.mockResolvedValue(alert({ accountId: null }))
+      mockedRepository.insertAlertWithRecipients.mockResolvedValue(alert({ accountId: null }))
 
       const res = await request(app).post('/app-panic/alert').send(BODY)
 
@@ -107,13 +106,14 @@ describe('/app-panic routes (PP1 — decisions 51/65/191-198)', () => {
     })
 
     it('201s for an IDENTIFIED caller — leaves no accountability entry', async () => {
-      mockedRepository.insertAlert.mockResolvedValue(alert({ accountId: 42 }))
+      mockedRepository.insertAlertWithRecipients.mockResolvedValue(alert({ accountId: 42 }))
 
       const res = await request(app).post('/app-panic/alert').set('Authorization', ownerToken()).send(BODY)
 
       expect(res.status).toBe(201)
-      expect(mockedRepository.insertAlert).toHaveBeenCalledWith(
-        expect.objectContaining({ accountId: 42 })
+      expect(mockedRepository.insertAlertWithRecipients).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: 42 }),
+        []
       )
       expect(mockedAccountability).not.toHaveBeenCalled()
     })
@@ -130,7 +130,7 @@ describe('/app-panic routes (PP1 — decisions 51/65/191-198)', () => {
         createdAt: '2026-09-04T12:00:00.000Z',
         recipientCount: 2,
       })
-      expect(mockedRepository.insertAlert).not.toHaveBeenCalled()
+      expect(mockedRepository.insertAlertWithRecipients).not.toHaveBeenCalled()
     })
 
     it('201s with ZERO recipients when the pool is empty — never a refusal', async () => {
@@ -149,7 +149,7 @@ describe('/app-panic routes (PP1 — decisions 51/65/191-198)', () => {
 
       expect(res.status).toBe(409)
       expect(res.body.code).toBe(ErrorCodes.PANIC_ALERT_ACTIVE)
-      expect(mockedRepository.insertAlert).not.toHaveBeenCalled()
+      expect(mockedRepository.insertAlertWithRecipients).not.toHaveBeenCalled()
     })
 
     it('never applies the cooldown to an ANONYMOUS caller — two anonymous triggers both succeed (documented gap, decision 198)', async () => {
@@ -177,7 +177,17 @@ describe('/app-panic routes (PP1 — decisions 51/65/191-198)', () => {
 
       expect(res.status).toBe(451)
       expect(res.body.code).toBe(ErrorCodes.LEGAL_BLOCKED)
-      expect(mockedRepository.insertAlert).not.toHaveBeenCalled()
+      expect(mockedRepository.insertAlertWithRecipients).not.toHaveBeenCalled()
+    })
+
+    it('500 INTERNAL when the transactional write fails — the client sees the failure, never a half-written alert', async () => {
+      mockedRepository.insertAlertWithRecipients.mockRejectedValue(new Error('FK failed'))
+
+      const res = await request(app).post('/app-panic/alert').send(BODY)
+
+      expect(res.status).toBe(500)
+      expect(res.body.code).toBe(ErrorCodes.INTERNAL)
+      expect(mockedAccountability).not.toHaveBeenCalled()
     })
 
     it('422 VALIDATION_FAILED for a malformed body — no message/text field accepted (decision 196)', async () => {
@@ -205,7 +215,7 @@ describe('/app-panic routes (PP1 — decisions 51/65/191-198)', () => {
     it('is never mounted under /api', async () => {
       const res = await request(app).post('/api/app-panic/alert').send(BODY)
       expect(res.status).not.toBe(201)
-      expect(mockedRepository.insertAlert).not.toHaveBeenCalled()
+      expect(mockedRepository.insertAlertWithRecipients).not.toHaveBeenCalled()
     })
   })
 

@@ -71,7 +71,7 @@ export async function listNearbyReports(query: FeedQuery): Promise<FeedPage> {
   // DS1 (decisions 200-207): ONE batched query for the whole page — never
   // one per row (the same discipline the tier lookup above applies to
   // categories). An empty page skips the call entirely — no wasted
-  // round-trip (mirrors insertRecipients' empty-array no-op elsewhere).
+  // round-trip (mirrors the empty-snapshot no-op of insertAlertWithRecipients).
   const directionEstimates =
     pageRows.length === 0
       ? new Map<number, { direction: Direction } | null>()

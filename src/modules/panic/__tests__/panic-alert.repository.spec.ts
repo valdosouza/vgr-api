@@ -3,10 +3,22 @@ import * as repository from '@modules/panic/panic-alert.repository'
 
 jest.mock('@shared/db/connection', () => ({
   __esModule: true,
-  default: { query: jest.fn() },
+  default: { query: jest.fn(), getConnection: jest.fn() },
 }))
 
-const mockedPool = pool as unknown as { query: jest.Mock }
+const mockedPool = pool as unknown as { query: jest.Mock; getConnection: jest.Mock }
+
+function connection() {
+  const conn = {
+    beginTransaction: jest.fn().mockResolvedValue(undefined),
+    commit: jest.fn().mockResolvedValue(undefined),
+    rollback: jest.fn().mockResolvedValue(undefined),
+    release: jest.fn(),
+    query: jest.fn(),
+  }
+  mockedPool.getConnection.mockResolvedValue(conn)
+  return conn
+}
 
 const flat = (sql: string) => sql.replace(/\s+/g, ' ').trim()
 
@@ -74,45 +86,68 @@ describe('panic-alert.repository — SQL contracts (migration 046)', () => {
     })
   })
 
-  describe('insertAlert', () => {
-    it('inserts with status active then reads the row back', async () => {
-      mockedPool.query
-        .mockResolvedValueOnce([{ insertId: 501 }])
-        .mockResolvedValueOnce([[ROW]])
+  describe('insertAlertWithRecipients (alert + trigger-time snapshot in ONE transaction, 65/192)', () => {
+    const INPUT = { clientKey: ROW.clientKey, accountId: 42, lat: -23.55, lng: -46.63 }
 
-      const alert = await repository.insertAlert({
-        clientKey: ROW.clientKey,
-        accountId: 42,
-        lat: -23.55,
-        lng: -46.63,
-      })
+    it('inserts the alert with status active, bulk inserts one recipient row per responder, reads the alert back and commits', async () => {
+      const conn = connection()
+      conn.query
+        .mockResolvedValueOnce([{ insertId: 501 }]) // INSERT tb_panic_alert
+        .mockResolvedValueOnce([{}]) // INSERT tb_panic_alert_recipient
+        .mockResolvedValueOnce([[ROW]]) // SELECT the alert back
+
+      const alert = await repository.insertAlertWithRecipients(INPUT, [8, 9, 10])
 
       expect(alert.id).toBe(501)
-      const [insertSql, insertParams] = mockedPool.query.mock.calls[0]
+      expect(conn.beginTransaction).toHaveBeenCalled()
+      const [insertSql, insertParams] = conn.query.mock.calls[0]
       expect(flat(insertSql)).toContain('INSERT INTO tb_panic_alert')
       expect(flat(insertSql)).toContain("'active'")
       expect(insertParams).toEqual([ROW.clientKey, 42, -23.55, -46.63])
-      const [selectSql, selectParams] = mockedPool.query.mock.calls[1]
+
+      const [recipientsSql, recipientsParams] = conn.query.mock.calls[1]
+      expect(flat(recipientsSql)).toContain('INSERT INTO tb_panic_alert_recipient')
+      expect(flat(recipientsSql)).toMatch(/VALUES \(\?, \?\), \(\?, \?\), \(\?, \?\)/)
+      expect(recipientsParams).toEqual([501, 8, 501, 9, 501, 10])
+
+      const [selectSql, selectParams] = conn.query.mock.calls[2]
       expect(flat(selectSql)).toContain('WHERE id = ?')
       expect(selectParams).toEqual([501])
-    })
-  })
 
-  describe('insertRecipients (snapshot at trigger time, 65/192)', () => {
-    it('bulk inserts one row per responder', async () => {
-      mockedPool.query.mockResolvedValue([{}])
-
-      await repository.insertRecipients(501, [8, 9, 10])
-
-      const [sql, params] = mockedPool.query.mock.calls[0]
-      expect(flat(sql)).toContain('INSERT INTO tb_panic_alert_recipient')
-      expect(flat(sql)).toMatch(/VALUES \(\?, \?\), \(\?, \?\), \(\?, \?\)/)
-      expect(params).toEqual([501, 8, 501, 9, 501, 10])
-    })
-
-    it('never queries the database for an EMPTY pool — no refusal, no wasted round-trip', async () => {
-      await repository.insertRecipients(501, [])
+      expect(conn.commit).toHaveBeenCalled()
+      expect(conn.release).toHaveBeenCalled()
+      // Every statement rides the transaction's connection, never the pool.
       expect(mockedPool.query).not.toHaveBeenCalled()
+    })
+
+    it('still commits the alert for an EMPTY pool — no recipient INSERT, no refusal (decision 65)', async () => {
+      const conn = connection()
+      conn.query
+        .mockResolvedValueOnce([{ insertId: 501 }]) // INSERT tb_panic_alert
+        .mockResolvedValueOnce([[ROW]]) // SELECT the alert back
+
+      const alert = await repository.insertAlertWithRecipients(INPUT, [])
+
+      expect(alert.id).toBe(501)
+      expect(conn.query).toHaveBeenCalledTimes(2)
+      const statements = conn.query.mock.calls.map(([sql]) => flat(sql))
+      expect(statements.some((sql) => sql.includes('tb_panic_alert_recipient'))).toBe(false)
+      expect(conn.commit).toHaveBeenCalled()
+      expect(conn.rollback).not.toHaveBeenCalled()
+      expect(conn.release).toHaveBeenCalled()
+    })
+
+    it('rolls back and releases the connection when the recipient insert fails — never an orphaned active alert', async () => {
+      const conn = connection()
+      conn.query
+        .mockResolvedValueOnce([{ insertId: 501 }]) // INSERT tb_panic_alert
+        .mockRejectedValueOnce(new Error('FK failed')) // INSERT tb_panic_alert_recipient
+
+      await expect(repository.insertAlertWithRecipients(INPUT, [8])).rejects.toThrow('FK failed')
+
+      expect(conn.rollback).toHaveBeenCalled()
+      expect(conn.release).toHaveBeenCalled()
+      expect(conn.commit).not.toHaveBeenCalled()
     })
   })
 

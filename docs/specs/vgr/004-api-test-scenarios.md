@@ -274,7 +274,7 @@
 - [ ] Should exclude a denied or revoked membership from the active members list
 
 **PanicAlertRepository / ChatThreadRepository / PaymentIntentRepository**
-- [x] Should persist a PanicAlert with its resolved recipient list intact (amended 2026-09-04: `insertAlert` then `insertRecipients` — a bulk insert of the trigger-time pool snapshot, empty array is a no-op, never an error — `panic-alert.repository.spec`, `panic-alert.service.spec`)
+- [x] Should persist a PanicAlert with its resolved recipient list intact (amended 2026-09-04, re-amended 2026-09-06: `insertAlertWithRecipients` — the alert insert and the bulk insert of the trigger-time pool snapshot in ONE transaction, rolled back together on failure so no orphaned `active` alert survives; an empty array skips the recipient statement, never the commit — `panic-alert.repository.spec`, `panic-alert.service.spec`)
 - [x] Should find-or-create exactly one ChatThread per (reportId, helperId) pair, never duplicating on repeated calls (amended 2026-09-03: helperId = helper ACCOUNT, 169; UNIQUE `(tb_report_id, helper_account_id)` + `insertThreadWithParticipants` returns null on the race — `chat.repository.spec`, `chat.service.spec`)
 - [ ] Should persist a PaymentIntent's mode and confirmation state accurately
 
