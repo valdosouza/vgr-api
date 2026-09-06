@@ -53,7 +53,10 @@
       "^@gateway/(.*)$": "<rootDir>/src/gateway/$1",
       "^@modules/(.*)$": "<rootDir>/src/modules/$1",
       "^@shared/(.*)$": "<rootDir>/src/shared/$1"
-    }
+    },
+    "modulePathIgnorePatterns": [
+      "<rootDir>/.claude/"
+    ]
   },
   "engines": {
     "node": ">=20"
