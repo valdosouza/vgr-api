@@ -1,4 +1,5 @@
 import pool from '@shared/db/connection'
+import { splitHelpTypes } from '@shared/help-offer/help-types'
 import {
   Category,
   QueueTierSets,
@@ -169,7 +170,8 @@ export async function findOffersWithNames(
 ): Promise<
   Array<{
     id: number
-    helpType: string
+    /** Decision 208: the set of fronts, alphabetical (child table 209). */
+    helpTypes: string[]
     anonymous: boolean
     helperAccountId: number | null
     helperDisplayName: string | null
@@ -179,10 +181,12 @@ export async function findOffersWithNames(
   }>
 > {
   const [rows] = await pool.query<any[]>(
-    `SELECT o.id, o.help_type AS helpType, o.anonymous,
+    `SELECT o.id, o.anonymous,
             o.helper_account_id AS helperAccountId,
             a.display_name AS helperDisplayName, o.created_at AS createdAt,
-            r.score AS ratingScore
+            r.score AS ratingScore,
+            (SELECT GROUP_CONCAT(t.help_type ORDER BY t.help_type)
+               FROM tb_help_offer_type t WHERE t.tb_help_offer_id = o.id) AS helpTypes
      FROM tb_help_offer o
      LEFT JOIN tb_user_account a ON a.id = o.helper_account_id
      LEFT JOIN tb_helper_rating r ON r.tb_help_offer_id = o.id AND r.deleted = 'N'
@@ -192,7 +196,7 @@ export async function findOffersWithNames(
   )
   return rows.map((row) => ({
     id: row.id,
-    helpType: row.helpType,
+    helpTypes: splitHelpTypes(row.helpTypes),
     anonymous: row.anonymous === 'S',
     helperAccountId: row.helperAccountId ?? null,
     helperDisplayName: row.helperDisplayName ?? null,
@@ -876,7 +880,8 @@ export async function findOffersForPanel(
 ): Promise<
   Array<{
     id: number
-    helpType: string
+    /** Decision 208: the set of fronts, alphabetical (child table 209). */
+    helpTypes: string[]
     anonymous: boolean
     helperAccountId: number | null
     helperDisplayName: string | null
@@ -885,10 +890,12 @@ export async function findOffersForPanel(
   }>
 > {
   const [rows] = await pool.query<any[]>(
-    `SELECT o.id, o.help_type AS helpType, o.anonymous,
+    `SELECT o.id, o.anonymous,
             o.helper_account_id AS helperAccountId,
             a.display_name AS helperDisplayName, o.created_at AS createdAt,
-            r.score AS ratingScore
+            r.score AS ratingScore,
+            (SELECT GROUP_CONCAT(t.help_type ORDER BY t.help_type)
+               FROM tb_help_offer_type t WHERE t.tb_help_offer_id = o.id) AS helpTypes
      FROM tb_help_offer o
      LEFT JOIN tb_user_account a ON a.id = o.helper_account_id
      LEFT JOIN tb_helper_rating r ON r.tb_help_offer_id = o.id AND r.deleted = 'N'
@@ -898,7 +905,7 @@ export async function findOffersForPanel(
   )
   return rows.map((row) => ({
     id: row.id,
-    helpType: row.helpType,
+    helpTypes: splitHelpTypes(row.helpTypes),
     anonymous: row.anonymous === 'S',
     helperAccountId: row.helperAccountId ?? null,
     helperDisplayName: row.helperDisplayName ?? null,

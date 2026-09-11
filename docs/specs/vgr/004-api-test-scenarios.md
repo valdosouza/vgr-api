@@ -241,7 +241,7 @@
 - [ ] Should return correctly paginated, ordered results from listNearby() for recency and for relevance ordering
 
 **HelpOfferRepository**
-- [ ] Should persist and retrieve a HelpOffer with its chosen HelpType intact
+- [x] Should persist and retrieve a HelpOffer with its chosen HelpTypes intact (**Amended 2026-09-11**, HT1 — decisions 208/209: the SET lives in `tb_help_offer_type`, written with the offer in one transaction and read back as one sorted array — `help-offers.repository.spec.ts`)
 - [ ] Should return all HelpOffers linked to a Report after that Report is Resolved (decision 18)
 
 **DirectionEstimateRepository**
@@ -360,10 +360,15 @@
   - When: `GET /api/reports?position=...&page=1&orderBy=recency` is called
   - Then: response contains only Reports within radius, paginated, ordered by submission recency
 
-- [ ] **Should register a HelpOffer when a Helper (not the Reporter) submits one**
+- [x] **Should register a HelpOffer when a Helper (not the Reporter) submits one** (**Amended 2026-09-11**, HT1: the route is `POST /app-help-offers` — app plane, 119 — and the body carries `helpTypes: HelpType[]` (1..5, no repeats; 422 otherwise), decisions 208/213 — `help-offers.routes.spec.ts`)
   - Given: an existing Report with reporterId = R, and a caller with userId = H (H ≠ R)
-  - When: `POST /api/help-offers` is called with `{ reportId, helpType }`
-  - Then: response is 201; HelpOfferSubmitted is emitted
+  - When: `POST /app-help-offers` is called with `{ reportId, helpTypes }`
+  - Then: response is 201; the `help_offered` timeline item carries the whole set (212)
+
+- [x] **Should let the Helper replace the fronts of their own offer while the Report is open** (added 2026-09-11, decision 211 — `help-offers.routes.spec.ts`, `help-offers.service.spec.ts`)
+  - Given: an open Report and an offer made by account H
+  - When: `PUT /app-help-offers/:id/types` is called by H with `{ helpTypes }`
+  - Then: 200 with the new set and a `help_offer_updated` timeline item; another account or a fully anonymous offer → 404; resolved Report → 422
 
 - [x] **Should log a Direction Sighting and return the updated estimate synchronously** (implemented 2026-09-04, DS1 — TWO corrections to this stale scenario, both noted, not new decisions: (1) plane — `POST /api/direction-sightings` predates the two-plane split (119); the real route is `POST /app-direction-sightings`, `optionalAppAuth`, same class of fix as panic's responder-pool `POST`; (2) disclosure — decision 203 (closed AFTER this scenario was drafted) means the response never carries `probabilityByDirection`, only `{ sightingId, reportId, estimate: Direction | null, count }` — see the write/read asymmetry note in `docs/feature/direction-sightings.md`)
   - Given: an existing Report with sightings already reconciling toward a direction

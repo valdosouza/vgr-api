@@ -203,8 +203,8 @@ describe('reports-admin.service — detail (decisions 159/160/166)', () => {
       { publicId: 'aaaaaaaa-0000-4000-8000-000000000002', mime: 'image/webp', width: 10, height: 10, status: 'blocked', blockedReasonCode: null, blockedNote: null, blockedAt: null },
     ])
     mockedRepository.findOffersForPanel.mockResolvedValue([
-      { id: 1, helpType: 'share', anonymous: true, helperAccountId: 99, helperDisplayName: 'Hidden', createdAt: new Date('2026-08-04T00:00:00Z'), ratingScore: null },
-      { id: 2, helpType: 'relay_information', anonymous: false, helperAccountId: 100, helperDisplayName: 'Bruno', createdAt: new Date('2026-08-05T00:00:00Z'), ratingScore: 4 },
+      { id: 1, helpTypes: ['share'], anonymous: true, helperAccountId: 99, helperDisplayName: 'Hidden', createdAt: new Date('2026-08-04T00:00:00Z'), ratingScore: null },
+      { id: 2, helpTypes: ['relay_information'], anonymous: false, helperAccountId: 100, helperDisplayName: 'Bruno', createdAt: new Date('2026-08-05T00:00:00Z'), ratingScore: 4 },
     ])
     mockedRepository.findAccountDisplayName.mockResolvedValue('Ana Reporter')
   })
@@ -285,10 +285,10 @@ describe('reports-admin.service — detail (decisions 159/160/166)', () => {
     const detail = await service.getReportPanelDetail(7)
 
     expect(detail.offers).toEqual([
-      { helpOfferId: 1, helpType: 'share', anonymous: true, helper: null, createdAt: '2026-08-04T00:00:00.000Z', ratingScore: null },
+      { helpOfferId: 1, helpTypes: ['share'], anonymous: true, helper: null, createdAt: '2026-08-04T00:00:00.000Z', ratingScore: null },
       {
         helpOfferId: 2,
-        helpType: 'relay_information',
+        helpTypes: ['relay_information'],
         anonymous: false,
         helper: { accountId: 100, displayName: 'Bruno' },
         createdAt: '2026-08-05T00:00:00.000Z',

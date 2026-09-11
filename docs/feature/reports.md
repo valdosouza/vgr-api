@@ -134,12 +134,30 @@ one act (141b), the thaw restarting both clocks together (141d). Orphans
 `MEDIA_ORPHAN_TTL_HOURS` (48h default, decision 136) in the existing
 media-expiry job.
 
-## Help offers (`/app-help-offers`, decisions 10/20/34/35)
+## Help offers (`/app-help-offers`, decisions 10/20/34/35, 208-214)
 
 Anonymous offers accepted in full (35, accountability trail 23);
 self-dealing rejected (20); one identified offer per report (dup = 409);
 no NEW offers after resolution (18 keeps only existing links); the
-timeline event carries the help type and never the helper identity.
+timeline event carries the help types and never the helper identity.
+
+**Several fronts per offer (HT1, 2026-09-11 — decisions 208-214,
+`plano-oferta-multitipo.md`).** `POST /app-help-offers` takes
+`helpTypes: HelpType[]` (1..5 of decision 10's list, no repeats; 422
+`VALIDATION_FAILED` otherwise — the singular `helpType` is gone, 213).
+Storage is the child table `tb_help_offer_type` (migration 049, decision
+209: backfilled from the old column, which was then dropped — 210); the
+offer row stays the one helper ↔ report link, so chat/rating/reward
+recipients are untouched (208). Every reader (owner/participant view,
+panel detail) returns `helpTypes: []` per offer, alphabetical (one
+`GROUP_CONCAT` subquery, split by `shared/help-offer/help-types.ts`).
+`PUT /app-help-offers/:id/types { helpTypes }` (app auth) lets the helper
+who made the offer REPLACE the set while the report is open (211): someone
+else's or a fully anonymous offer (no account to match — 032 stores no
+client key for offers) answers 404, a resolved report 422; the timeline
+gets `help_offer_updated { helpTypes }` (212). Registered, out of scope:
+an anonymous offer on one's own report is accepted (20 only sees
+accounts).
 
 ## Case freeze (`/api/case-freeze`, decisions 141/142 — panel plane)
 
@@ -168,7 +186,10 @@ form 47, accountability resilience), `reports.routes.spec` (anonymous
 end-to-end, 451, XOR, mandatory subject, invalid-token 401),
 `reports.lifecycle.spec` (ownership by clientKey, frozen untouchable,
 retention stamp, visibility tiers, masking, dual-control unfreeze, purge),
-`help-offers.service.spec` (anti-fraud, 409, identity-free timeline),
+`help-offers.service.spec` (anti-fraud, 409, identity-free timeline, the
+set of fronts, 211's ownership/open-case rules), `help-offers.routes.spec`
+(set validation, PUT auth/404/422), `help-offers.repository.spec`
+(049's one-transaction insert, replace, GROUP_CONCAT read),
 `case-freeze.routes.spec` (grants, audit, plane separation), plus the
 risk-config spec adapted to the shared read path.
 `reports.media.spec` (R4: bearer-secret attach, gate 451 before any

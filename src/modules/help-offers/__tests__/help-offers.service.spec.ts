@@ -10,7 +10,11 @@ const mockedAccountability = appendAccountabilityLogEntry as jest.MockedFunction
   typeof appendAccountabilityLogEntry
 >
 
-const INPUT = { reportId: 7, helpType: 'physical_presence' as const, anonymous: false }
+const INPUT = {
+  reportId: 7,
+  helpTypes: ['physical_presence' as const, 'share' as const],
+  anonymous: false,
+}
 
 describe('help-offers.service (decisions 10/18/20/34/35)', () => {
   beforeEach(() => {
@@ -70,9 +74,15 @@ describe('help-offers.service (decisions 10/18/20/34/35)', () => {
     ).rejects.toMatchObject({ statusCode: 409, code: 'DUPLICATE' })
   })
 
-  it('the timeline event carries the help type and NEVER the helper identity (6/60)', async () => {
+  it('the timeline event carries the whole set of fronts and NEVER the helper identity (6/60/212)', async () => {
     await service.submitHelpOffer(INPUT, { accountId: 8, ip: '10.0.0.1' })
-    expect(mockedRepository.appendHelpOfferedEvent).toHaveBeenCalledWith(7, 'physical_presence')
+    expect(mockedRepository.insertHelpOffer).toHaveBeenCalledWith(
+      expect.objectContaining({ helpTypes: ['physical_presence', 'share'] })
+    )
+    expect(mockedRepository.appendHelpOfferedEvent).toHaveBeenCalledWith(7, [
+      'physical_presence',
+      'share',
+    ])
   })
 
   it('a missing or purged report answers 404', async () => {
@@ -80,5 +90,76 @@ describe('help-offers.service (decisions 10/18/20/34/35)', () => {
     await expect(
       service.submitHelpOffer(INPUT, { accountId: 8, ip: '10.0.0.1' })
     ).rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  describe('updateHelpOfferTypes (decision 211)', () => {
+    const offer = (overrides: Record<string, unknown> = {}) => ({
+      id: 11,
+      reportId: 7,
+      helperAccountId: 8,
+      anonymous: false,
+      helpTypes: ['share' as const],
+      createdAt: new Date('2026-09-11T00:00:00Z'),
+      reportStatus: 'open',
+      ...overrides,
+    })
+
+    it('the helper of the offer replaces the set and the timeline gets its own item (212)', async () => {
+      mockedRepository.findOfferForUpdate.mockResolvedValue(offer())
+
+      const result = await service.updateHelpOfferTypes(
+        { helpOfferId: 11, helpTypes: ['physical_presence', 'remote_support'] },
+        { accountId: 8 }
+      )
+
+      expect(result).toEqual({ helpOfferId: 11, helpTypes: ['physical_presence', 'remote_support'] })
+      expect(mockedRepository.replaceHelpOfferTypes).toHaveBeenCalledWith(11, [
+        'physical_presence',
+        'remote_support',
+      ])
+      expect(mockedRepository.appendHelpOfferUpdatedEvent).toHaveBeenCalledWith(7, [
+        'physical_presence',
+        'remote_support',
+      ])
+    })
+
+    it('a logged-in helper who CHOSE anonymity still owns the offer by account (23)', async () => {
+      mockedRepository.findOfferForUpdate.mockResolvedValue(offer({ anonymous: true }))
+      await expect(
+        service.updateHelpOfferTypes({ helpOfferId: 11, helpTypes: ['share'] }, { accountId: 8 })
+      ).resolves.toMatchObject({ helpOfferId: 11 })
+    })
+
+    it("someone else's offer is a 404, never a hint that it exists", async () => {
+      mockedRepository.findOfferForUpdate.mockResolvedValue(offer())
+      await expect(
+        service.updateHelpOfferTypes({ helpOfferId: 11, helpTypes: ['share'] }, { accountId: 9 })
+      ).rejects.toMatchObject({ statusCode: 404, code: 'NOT_FOUND' })
+      expect(mockedRepository.replaceHelpOfferTypes).not.toHaveBeenCalled()
+    })
+
+    it('a fully anonymous offer (no account) cannot be claimed by anyone', async () => {
+      mockedRepository.findOfferForUpdate.mockResolvedValue(
+        offer({ helperAccountId: null, anonymous: true })
+      )
+      await expect(
+        service.updateHelpOfferTypes({ helpOfferId: 11, helpTypes: ['share'] }, { accountId: 8 })
+      ).rejects.toMatchObject({ statusCode: 404 })
+    })
+
+    it('a resolved report freezes the set (18)', async () => {
+      mockedRepository.findOfferForUpdate.mockResolvedValue(offer({ reportStatus: 'resolved' }))
+      await expect(
+        service.updateHelpOfferTypes({ helpOfferId: 11, helpTypes: ['share'] }, { accountId: 8 })
+      ).rejects.toMatchObject({ statusCode: 422, code: 'BUSINESS_RULE' })
+      expect(mockedRepository.replaceHelpOfferTypes).not.toHaveBeenCalled()
+    })
+
+    it('a missing or deleted offer is a 404', async () => {
+      mockedRepository.findOfferForUpdate.mockResolvedValue(null)
+      await expect(
+        service.updateHelpOfferTypes({ helpOfferId: 11, helpTypes: ['share'] }, { accountId: 8 })
+      ).rejects.toMatchObject({ statusCode: 404 })
+    })
   })
 })

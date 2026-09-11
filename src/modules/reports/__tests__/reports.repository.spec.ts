@@ -317,7 +317,7 @@ describe('reports.repository — findOffersWithNames carries the rating (RT1, de
       [
         {
           id: 1,
-          helpType: 'share',
+          helpTypes: 'relay_information,share',
           anonymous: 'S',
           helperAccountId: 8,
           helperDisplayName: 'Ana',
@@ -326,7 +326,7 @@ describe('reports.repository — findOffersWithNames carries the rating (RT1, de
         },
         {
           id: 2,
-          helpType: 'share',
+          helpTypes: 'relay_information,share',
           anonymous: 'N',
           helperAccountId: null,
           helperDisplayName: null,
@@ -341,6 +341,12 @@ describe('reports.repository — findOffersWithNames carries the rating (RT1, de
 
     const [sql, params] = mockedPool.query.mock.calls[0] as unknown as [string, unknown[]]
     const flat = sql.replace(/\s+/g, ' ')
+    // Decisions 208/209: the fronts come from the child table, one
+    // GROUP_CONCAT per offer in a stable order — never a help_type column.
+    expect(flat).toMatch(
+      /GROUP_CONCAT\(t\.help_type ORDER BY t\.help_type\) FROM tb_help_offer_type t WHERE t\.tb_help_offer_id = o\.id/
+    )
+    expect(flat).not.toContain('o.help_type')
     expect(flat).toMatch(
       /LEFT JOIN tb_helper_rating \w+ ON \w+\.tb_help_offer_id = o\.id AND \w+\.deleted = 'N'/
     )
@@ -350,7 +356,7 @@ describe('reports.repository — findOffersWithNames carries the rating (RT1, de
     expect(rows).toEqual([
       {
         id: 1,
-        helpType: 'share',
+        helpTypes: ['relay_information', 'share'],
         anonymous: true,
         helperAccountId: 8,
         helperDisplayName: 'Ana',
@@ -359,7 +365,7 @@ describe('reports.repository — findOffersWithNames carries the rating (RT1, de
       },
       {
         id: 2,
-        helpType: 'share',
+        helpTypes: ['relay_information', 'share'],
         anonymous: false,
         helperAccountId: null,
         helperDisplayName: null,
@@ -382,7 +388,7 @@ describe('reports.repository — findOffersForPanel carries the rating score (RT
       [
         {
           id: 1,
-          helpType: 'share',
+          helpTypes: 'relay_information,share',
           anonymous: 'S',
           helperAccountId: 8,
           helperDisplayName: 'Ana',
@@ -391,7 +397,7 @@ describe('reports.repository — findOffersForPanel carries the rating score (RT
         },
         {
           id: 2,
-          helpType: 'share',
+          helpTypes: 'relay_information,share',
           anonymous: 'N',
           helperAccountId: null,
           helperDisplayName: null,
@@ -418,7 +424,7 @@ describe('reports.repository — findOffersForPanel carries the rating score (RT
     expect(rows).toEqual([
       {
         id: 1,
-        helpType: 'share',
+        helpTypes: ['relay_information', 'share'],
         anonymous: true,
         helperAccountId: 8,
         helperDisplayName: 'Ana',
@@ -427,7 +433,7 @@ describe('reports.repository — findOffersForPanel carries the rating score (RT
       },
       {
         id: 2,
-        helpType: 'share',
+        helpTypes: ['relay_information', 'share'],
         anonymous: false,
         helperAccountId: null,
         helperDisplayName: null,

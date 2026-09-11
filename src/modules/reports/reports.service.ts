@@ -458,7 +458,7 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
     const caseRatable = report.status === 'resolved' && !report.hidden
     view.offers = offers.map((row) => ({
       helpOfferId: row.id,
-      helpType: row.helpType,
+      helpTypes: row.helpTypes,
       // Identity only when the helper chose it AND the tier allows it
       // (decisions 6/40/60); timestamps never on high tier (41).
       helperDisplayName: row.anonymous || tier === 'high' ? null : row.helperDisplayName,

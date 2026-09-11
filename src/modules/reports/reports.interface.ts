@@ -97,7 +97,8 @@ export interface TimelineEventView {
  *  never on high tier. Shape owned here — no cross-module type import. */
 export interface OfferView {
   helpOfferId: number
-  helpType: string
+  /** Decision 208: every front the helper offered, alphabetical. */
+  helpTypes: string[]
   helperDisplayName: string | null
   createdAt: string | null
   /** Rating facet (RT1, decisions 48/180/181/183) — owner only (185). */
@@ -330,7 +331,8 @@ export interface PanelMediaView {
 
 export interface PanelOfferView {
   helpOfferId: number
-  helpType: string
+  /** Decision 208: every front the helper offered, alphabetical. */
+  helpTypes: string[]
   anonymous: boolean
   helper: PanelActorRef | null
   createdAt: string

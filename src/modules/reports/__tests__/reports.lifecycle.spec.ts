@@ -173,7 +173,7 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
       mockedRepository.findOffersWithNames.mockResolvedValue([
         {
           id: 1,
-          helpType: 'physical_presence',
+          helpTypes: ['physical_presence'],
           anonymous: false,
           helperAccountId: 8,
           helperDisplayName: 'Ana',
@@ -190,7 +190,7 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
         expect(view.offers).toEqual([
           {
             helpOfferId: 1,
-            helpType: 'physical_presence',
+            helpTypes: ['physical_presence'],
             helperDisplayName: null, // high tier masks even a willing identity
             createdAt: null, // and never leaks timestamps (41)
             rating: { score: null, ratable: false }, // open case (181)
@@ -204,7 +204,7 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
       mockedRepository.findOffersWithNames.mockResolvedValue([
         {
           id: 1,
-          helpType: 'share',
+          helpTypes: ['share'],
           anonymous: false,
           helperAccountId: 8,
           helperDisplayName: 'Ana',
@@ -213,7 +213,7 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
         },
         {
           id: 2,
-          helpType: 'share',
+          helpTypes: ['share'],
           anonymous: true,
           helperAccountId: 9,
           helperDisplayName: 'Beto',
@@ -468,7 +468,7 @@ describe('getReportView — chat entry point (C1, decision 172)', () => {
 describe('getReportView — offers[].rating (RT1, decisions 48/180/181/183/185)', () => {
   const helperOffer = (overrides: Record<string, unknown> = {}) => ({
     id: 1,
-    helpType: 'share',
+    helpTypes: ['share'],
     anonymous: true,
     helperAccountId: 8,
     helperDisplayName: 'Ana',
@@ -535,7 +535,7 @@ describe('getReportView — offers[].rating (RT1, decisions 48/180/181/183/185)'
     mockedRepository.findOffersWithNames.mockResolvedValue([helperOffer({ ratingScore: 3 })])
     const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
     expect(Object.keys((view as any).offers[0]).sort()).toEqual(
-      ['createdAt', 'helpType', 'helpOfferId', 'helperDisplayName', 'rating'].sort()
+      ['createdAt', 'helpTypes', 'helpOfferId', 'helperDisplayName', 'rating'].sort()
     )
     expect(JSON.stringify(view)).not.toContain('helperAccountId')
     expect(JSON.stringify(view)).not.toContain('ratingScore')

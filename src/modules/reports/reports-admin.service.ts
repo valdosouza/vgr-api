@@ -197,7 +197,7 @@ export async function getReportPanelDetail(reportId: number): Promise<ReportPane
     })),
     offers: offers.map((offer) => ({
       helpOfferId: offer.id,
-      helpType: offer.helpType,
+      helpTypes: offer.helpTypes,
       anonymous: offer.anonymous,
       helper:
         offer.anonymous || offer.helperAccountId === null
