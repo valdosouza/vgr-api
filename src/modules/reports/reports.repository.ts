@@ -217,6 +217,28 @@ export async function hasOfferByAccount(reportId: number, accountId: number): Pr
   return rows.length > 0
 }
 
+/** The viewer's OWN identified offer on a report, with its current set of
+ *  fronts (HT1 addendum for decision 211): the participant view carries
+ *  it so the app knows WHICH offer "change my fronts" edits and what is
+ *  checked today. Null when the account has no offer here — the same
+ *  question `hasOfferByAccount` answers, plus the payload. */
+export async function findOfferByAccount(
+  reportId: number,
+  accountId: number
+): Promise<{ id: number; helpTypes: string[] } | null> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT o.id,
+            (SELECT GROUP_CONCAT(t.help_type ORDER BY t.help_type)
+               FROM tb_help_offer_type t WHERE t.tb_help_offer_id = o.id) AS helpTypes
+     FROM tb_help_offer o
+     WHERE o.tb_report_id = ? AND o.helper_account_id = ? AND o.deleted = 'N'
+     LIMIT 1`,
+    [reportId, accountId]
+  )
+  if (rows.length === 0) return null
+  return { id: rows[0].id, helpTypes: splitHelpTypes(rows[0].helpTypes) }
+}
+
 /** Freeze (decision 141a) — one human, mandatory reason. */
 export async function freeze(id: number, reason: string): Promise<boolean> {
   const [result] = await pool.query<any>(

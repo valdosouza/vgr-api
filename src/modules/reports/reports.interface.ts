@@ -177,6 +177,11 @@ export type ReportView =
       media: MediaAttachmentView[]
       /** Owner only — absent for participants (decision 55's caution). */
       offers?: OfferView[]
+      /** Participant only (HT1 addendum for decision 211, 2026-09-19): the
+       *  viewer's OWN offer, so the app can offer "change my fronts" —
+       *  its id and the current set. Never someone else's offer, never on
+       *  the owner/public/summary views. */
+      myOffer?: MyOfferView
       /** Chat entry point (C1, decision 172): counts only — the owner
        *  sees how many threads/unread, a helper participant their own
        *  thread id (null before the first message) and unread. Never on
@@ -187,6 +192,12 @@ export type ReportView =
        *  computed the same way regardless of report status. */
       directionEstimate: { direction: Direction } | null
     }
+
+/** The participant's own offer (decision 211) — id + current fronts. */
+export interface MyOfferView {
+  helpOfferId: number
+  helpTypes: string[]
+}
 
 export interface OwnerChatSummary {
   threads: number

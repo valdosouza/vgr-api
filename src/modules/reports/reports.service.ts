@@ -373,10 +373,13 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
   }
 
   const isOwner = owns(report, viewer)
-  const isParticipant =
-    !isOwner &&
-    viewer.accountId !== null &&
-    (await repository.hasOfferByAccount(report.id, viewer.accountId))
+  // The participant check and the "my offer" facet (decision 211) are the
+  // same lookup: an IDENTIFIED offer by this account on this report.
+  const myOffer =
+    !isOwner && viewer.accountId !== null
+      ? await repository.findOfferByAccount(report.id, viewer.accountId)
+      : null
+  const isParticipant = myOffer != null
 
   if (!isOwner && !isParticipant) {
     // Hidden by moderation (162): gone from the public detail AND from the
@@ -446,6 +449,13 @@ export async function getReportView(reportId: number, viewer: ViewerContext): Pr
       width: m.width,
       height: m.height,
     })),
+  }
+
+  if (myOffer) {
+    // Participant only: their OWN offer (id + current fronts) so the app
+    // can offer "change my fronts" while the case is open (211). Nobody
+    // else's offer ever appears here (55).
+    view.myOffer = { helpOfferId: myOffer.id, helpTypes: myOffer.helpTypes }
   }
 
   if (isOwner) {

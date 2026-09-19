@@ -64,6 +64,7 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
     mockedRepository.getHelperChatSummary.mockResolvedValue(null)
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.findOfferByAccount.mockResolvedValue(null)
     mockedRepository.findPendingUnfreeze.mockResolvedValue(null)
     mockedRepository.markResolved.mockResolvedValue(true)
     mockedRepository.freeze.mockResolvedValue(true)
@@ -233,7 +234,7 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
 
     it('an identified helper with an offer is a participant: full view, no offers list', async () => {
       mockedRepository.findById.mockResolvedValue(row())
-      mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+      mockedRepository.findOfferByAccount.mockResolvedValue({ id: 31, helpTypes: ['share'] })
 
       const view = await service.getReportView(7, STRANGER)
 
@@ -241,7 +242,19 @@ describe('reports lifecycle (R3 — decisions 18/19/50/131/135/141)', () => {
       if (view.access === 'participant') {
         expect(view.position).toEqual({ lat: -23.556789, lng: -46.634567 })
         expect(view.offers).toBeUndefined()
+        // Their OWN offer only (HT1 addendum for 211): id + current fronts.
+        expect(view.myOffer).toEqual({ helpOfferId: 31, helpTypes: ['share'] })
       }
+    })
+
+    it('the owner never gets a myOffer facet — only the participant sees their own offer', async () => {
+      mockedRepository.findById.mockResolvedValue(row())
+
+      const view = await service.getReportView(7, OWNER_BY_ACCOUNT)
+
+      expect(view.access).toBe('owner')
+      expect((view as any).myOffer).toBeUndefined()
+      expect(mockedRepository.findOfferByAccount).not.toHaveBeenCalled()
     })
 
     it('a purged case is gone (25/131)', async () => {
@@ -348,6 +361,7 @@ describe('hidden report on the APP plane (B2 — decisions 162/167)', () => {
     mockedRepository.getHelperChatSummary.mockResolvedValue(null)
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.findOfferByAccount.mockResolvedValue(null)
     mockedRepository.getDirectionEstimateFacet.mockResolvedValue(null)
   })
 
@@ -382,7 +396,7 @@ describe('hidden report on the APP plane (B2 — decisions 162/167)', () => {
 
   it('a PARTICIPANT sees the same mark', async () => {
     mockedRepository.findById.mockResolvedValue(row({ hidden: true, hiddenReasonCode: 'abuse' }))
-    mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+    mockedRepository.findOfferByAccount.mockResolvedValue({ id: 31, helpTypes: ['share'] })
 
     const view = await service.getReportView(7, STRANGER)
 
@@ -418,6 +432,7 @@ describe('getReportView — chat entry point (C1, decision 172)', () => {
     mockedRepository.findOffersWithNames.mockResolvedValue([])
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.findOfferByAccount.mockResolvedValue(null)
     mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 2, unread: 3 })
     mockedRepository.getHelperChatSummary.mockResolvedValue({ threadId: 5, unread: 1 })
     mockedRepository.getDirectionEstimateFacet.mockResolvedValue(null)
@@ -434,7 +449,7 @@ describe('getReportView — chat entry point (C1, decision 172)', () => {
 
   it('a helper participant gets { threadId, unread } — null threadId before the first message', async () => {
     mockedRepository.findById.mockResolvedValue(row())
-    mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+    mockedRepository.findOfferByAccount.mockResolvedValue({ id: 31, helpTypes: ['share'] })
     let view = await service.getReportView(7, STRANGER)
     expect(view.access).toBe('participant')
     expect((view as any).chat).toEqual({ threadId: 5, unread: 1 })
@@ -485,6 +500,7 @@ describe('getReportView — offers[].rating (RT1, decisions 48/180/181/183/185)'
     mockedRepository.getTimeline.mockResolvedValue([])
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.findOfferByAccount.mockResolvedValue(null)
     mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 0, unread: 0 })
     mockedRepository.getHelperChatSummary.mockResolvedValue(null)
     mockedRepository.getDirectionEstimateFacet.mockResolvedValue(null)
@@ -543,7 +559,7 @@ describe('getReportView — offers[].rating (RT1, decisions 48/180/181/183/185)'
 
   it('a PARTICIPANT (helper) view carries no rating data at all (184/185)', async () => {
     mockedRepository.findById.mockResolvedValue(resolved())
-    mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+    mockedRepository.findOfferByAccount.mockResolvedValue({ id: 31, helpTypes: ['share'] })
     mockedRepository.findOffersWithNames.mockResolvedValue([helperOffer({ ratingScore: 1 })])
     const view = await service.getReportView(7, STRANGER)
     expect(view.access).toBe('participant')
@@ -578,6 +594,7 @@ describe('getReportView — direction estimate facet (DS1, decisions 200-204)', 
     mockedRepository.findOffersWithNames.mockResolvedValue([])
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.findOfferByAccount.mockResolvedValue(null)
     mockedRepository.getOwnerChatSummary.mockResolvedValue({ threads: 0, unread: 0 })
     mockedRepository.getHelperChatSummary.mockResolvedValue(null)
   })
@@ -614,7 +631,7 @@ describe('getReportView — direction estimate facet (DS1, decisions 200-204)', 
 
   it('a PARTICIPANT (identified helper with an offer) sees the same facet', async () => {
     mockedRepository.findById.mockResolvedValue(row())
-    mockedRepository.hasOfferByAccount.mockResolvedValue(true)
+    mockedRepository.findOfferByAccount.mockResolvedValue({ id: 31, helpTypes: ['share'] })
     mockedRepository.getDirectionEstimateFacet.mockResolvedValue({ direction: 'W' })
 
     const view = await service.getReportView(7, STRANGER)

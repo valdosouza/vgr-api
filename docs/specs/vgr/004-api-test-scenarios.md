@@ -123,6 +123,7 @@
 - [x] Should exclude ratings of currently hidden Reports from the aggregate — the SQL JOINs `tb_report.hidden = 'N'` (decision 187)
 - [x] Should keep the rating rows through the Report purge — the purge statements never touch `tb_helper_rating` (decision 187)
 - [x] Should carry `offers[].rating { score, ratable }` on the OWNER view only — participant, public and summary views carry no rating data (decisions 181/183/185)
+- [x] Should carry `myOffer { helpOfferId, helpTypes }` on the PARTICIPANT view only — the viewer's own identified offer, never the owner's/public's (amended 2026-09-19, HT1 addendum for decision 211 — `reports.lifecycle.spec`)
 
 **PanicAlert**
 > **Amended, 2026-09-04**: implemented (PP1, decisions 190-199) in

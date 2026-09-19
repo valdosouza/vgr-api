@@ -88,6 +88,7 @@ describe('report media — M2 (decisions 128/129/134/136/138)', () => {
     mockedRepository.attachMedia.mockResolvedValue('attached')
     mockedRepository.isMediaLinked.mockResolvedValue(false)
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.findOfferByAccount.mockResolvedValue(null)
     mockedRepository.listAttachedMedia.mockResolvedValue([])
     mockedRepository.getTimeline.mockResolvedValue([])
     mockedRepository.findOffersWithNames.mockResolvedValue([])
@@ -325,6 +326,7 @@ describe('report media under moderation (B2 — decision 162)', () => {
     mockedTier.mockResolvedValue('low')
     mockedRepository.findById.mockResolvedValue(report())
     mockedRepository.hasOfferByAccount.mockResolvedValue(false)
+    mockedRepository.findOfferByAccount.mockResolvedValue(null)
     mockedOpenObject.mockResolvedValue(Buffer.from('plain-image'))
   })
 

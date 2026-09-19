@@ -159,6 +159,14 @@ gets `help_offer_updated { helpTypes }` (212). Registered, out of scope:
 an anonymous offer on one's own report is accepted (20 only sees
 accounts).
 
+**HT1 addendum (2026-09-19, for decision 211's mobile affordance).** The
+`participant` view of `GET /app-reports/:id` now carries
+`myOffer: { helpOfferId, helpTypes }` — the viewer's OWN identified offer
+(the same lookup that makes them a participant, `findOfferByAccount`), so
+the app knows which offer "change my fronts" edits and what is checked
+today. Never on the owner/public/summary views, never anyone else's offer
+(55). The owner's `offers[]` is unchanged.
+
 ## Case freeze (`/api/case-freeze`, decisions 141/142 — panel plane)
 
 The ONE panel surface this front adds: `GET /:id` state,
