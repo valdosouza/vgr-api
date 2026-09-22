@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import { pagedQueryDto } from '@shared/http/paged-query'
+
+/** GET / query (PS0, decision 220): optional page/pageSize, filter on description. */
+export const systemModuleListQueryDto = pagedQueryDto
 
 export const systemModuleSaveDto = z.object({
   description: z.string().min(2).max(120),

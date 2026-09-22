@@ -124,3 +124,63 @@ describe('PUT /api/panic/responder-pool/:id/resolve', () => {
     expect(res.body.code).toBe('VALIDATION_FAILED')
   })
 })
+
+/** PS0 (decision 220): optional page/pageSize on the admin queue. */
+describe('GET /api/panic/responder-pool — paging (decision 220)', () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = 'test-secret'
+  })
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedAcl.userHasPrivilege.mockImplementation(async (userId: number) => userId !== 42)
+  })
+
+  it('without page keeps the legacy plain array', async () => {
+    mockedService.listPendingResponderRequests.mockResolvedValue([])
+
+    const res = await request(app)
+      .get('/api/panic/responder-pool')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true, data: [] })
+    expect(mockedService.listPendingResponderRequests.mock.calls[0][0]).not.toHaveProperty('page')
+  })
+
+  it('with page=2&pageSize=10 answers { items, page, pageSize, total } in data', async () => {
+    const paged = { items: [], page: 2, pageSize: 10, total: 0 }
+    mockedService.listPendingResponderRequests.mockResolvedValue(paged)
+
+    const res = await request(app)
+      .get('/api/panic/responder-pool?page=2&pageSize=10')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true, data: paged })
+    expect(mockedService.listPendingResponderRequests).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 2, pageSize: 10 })
+    )
+  })
+
+  it('pageSize=1000 answers 422 VALIDATION_FAILED and never reaches the service', async () => {
+    const res = await request(app)
+      .get('/api/panic/responder-pool?page=1&pageSize=1000')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+
+    expect(res.status).toBe(422)
+    expect(res.body.code).toBe('VALIDATION_FAILED')
+    expect(mockedService.listPendingResponderRequests).not.toHaveBeenCalled()
+  })
+
+  it('ignores a text filter — the queue row carries no applicant name to match on', async () => {
+    mockedService.listPendingResponderRequests.mockResolvedValue([])
+
+    const res = await request(app)
+      .get('/api/panic/responder-pool?filter=ana')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+
+    expect(res.status).toBe(200)
+    expect(mockedService.listPendingResponderRequests.mock.calls[0][0]).not.toHaveProperty('filter')
+  })
+})

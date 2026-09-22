@@ -10,6 +10,12 @@ import { invalidateLegalGateCache } from '@shared/legal/legal-gate'
 import { OperationalState } from '@shared/legal/legal-gate.interface'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
+import {
+  CapabilityListQuery,
+  JurisdictionListQuery,
+  RuleListQuery,
+} from '@modules/legal-policy/legal-policy.dto'
+import { PagedResult, pagedOrPlain } from '@shared/http/paged-query'
 
 /**
  * Administration of the Legal Gate (decisions 106-108). The gate READS in
@@ -20,11 +26,21 @@ import { ErrorCodes } from '@shared/errors/error-codes'
 
 // ---------------------------------------------------------------- rules
 
-export async function listRules(filter: {
-  capability?: string
-  jurisdictionCode?: string
-}): Promise<LegalRuleRow[]> {
-  return repository.listRules(filter)
+/** Plain array without `page`, `{ items, page, pageSize, total }` with it
+ *  (PS0, decision 220); the exact capability/jurisdiction filters remain. */
+export async function listRules(
+  query: RuleListQuery
+): Promise<LegalRuleRow[] | PagedResult<LegalRuleRow>> {
+  const filters = {
+    capability: query.capability,
+    jurisdictionCode: query.jurisdiction,
+    filter: query.filter,
+  }
+  return pagedOrPlain(
+    query,
+    (window) => repository.listRules(filters, window),
+    () => repository.countRules(filters)
+  )
 }
 
 export async function proposeRule(
@@ -132,8 +148,15 @@ export async function rejectRule(id: number, actorId: number): Promise<LegalRule
 
 const STATE_RANK: Record<OperationalState, number> = { live: 0, restricted: 1, suspended: 2 }
 
-export async function listJurisdictions(): Promise<JurisdictionAdminRow[]> {
-  return repository.listJurisdictions()
+/** Plain array without `page`, paged shape with it (PS0, decision 220). */
+export async function listJurisdictions(
+  query: JurisdictionListQuery
+): Promise<JurisdictionAdminRow[] | PagedResult<JurisdictionAdminRow>> {
+  return pagedOrPlain(
+    query,
+    (window) => repository.listJurisdictions(query.filter, window),
+    () => repository.countJurisdictions(query.filter)
+  )
 }
 
 /**
@@ -187,9 +210,18 @@ export async function confirmOperationalState(
 
 // --------------------------------------------------------- capabilities
 
-export async function listCapabilities(jurisdictionCode: string): Promise<CapabilityOverviewRow[]> {
+/** Plain array without `page`, paged shape with it (PS0, decision 220).
+ *  The unknown-jurisdiction 404 comes first, before any list or count. */
+export async function listCapabilities(
+  jurisdictionCode: string,
+  query: Omit<CapabilityListQuery, 'jurisdiction'>
+): Promise<CapabilityOverviewRow[] | PagedResult<CapabilityOverviewRow>> {
   if (!(await repository.findJurisdictionByCode(jurisdictionCode))) {
     throw new HttpError(404, 'Jurisdiction not found', undefined, ErrorCodes.NOT_FOUND)
   }
-  return repository.listCapabilityOverview(jurisdictionCode)
+  return pagedOrPlain(
+    query,
+    (window) => repository.listCapabilityOverview(jurisdictionCode, query.filter, window),
+    () => repository.countCapabilities(query.filter)
+  )
 }

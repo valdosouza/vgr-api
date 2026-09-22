@@ -1,13 +1,14 @@
 import { Request, Response } from 'express'
-import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
-import { systemModuleSaveDto } from '@modules/system-modules/system-module.dto'
+import { handleError, parseBody, parseId, parseQuery } from '@shared/http/controller-utils'
+import { systemModuleListQueryDto, systemModuleSaveDto } from '@modules/system-modules/system-module.dto'
 import { auditFromRequest } from '@shared/audit/admin-audit'
 import * as service from '@modules/system-modules/system-module.service'
 
 export async function list(req: Request, res: Response) {
+  const query = parseQuery(systemModuleListQueryDto, req, res)
+  if (query === null) return
   try {
-    const filter = typeof req.query.filter === 'string' ? req.query.filter : undefined
-    res.status(200).json({ ok: true, data: await service.listSystemModules(filter) })
+    res.status(200).json({ ok: true, data: await service.listSystemModules(query) })
   } catch (err) {
     handleError(res, err, 'system-modules GET')
   }

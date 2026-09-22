@@ -6,6 +6,20 @@ import {
   LegalRuleRow,
 } from '@modules/legal-policy/legal-policy.interface'
 import { OperationalState } from '@shared/legal/legal-gate.interface'
+import { LIMIT_OFFSET_SQL, PageWindow, limitOffsetArgs } from '@shared/http/paged-query'
+
+/** Text filter (PS0, decision 220): one LIKE per listed column, parameterized. */
+function likeClause(columns: string[], filter?: string): { sql: string; params: string[] } {
+  if (!filter) return { sql: '', params: [] }
+  return {
+    sql: ` AND (${columns.map((column) => `${column} LIKE ?`).join(' OR ')})`,
+    params: columns.map(() => `%${filter}%`),
+  }
+}
+
+function windowClause(window?: PageWindow): { sql: string; params: number[] } {
+  return window ? { sql: ` ${LIMIT_OFFSET_SQL}`, params: limitOffsetArgs(window) } : { sql: '', params: [] }
+}
 
 function toRuleRow(row: any): LegalRuleRow {
   return {
@@ -35,11 +49,18 @@ const RULE_SELECT = `
          created_at AS createdAt, decided_at AS decidedAt
   FROM tb_legal_rule`
 
-export async function listJurisdictions(): Promise<JurisdictionAdminRow[]> {
+/** No window = the legacy unpaged list (decision 220 keeps it intact). */
+export async function listJurisdictions(
+  filter?: string,
+  window?: PageWindow
+): Promise<JurisdictionAdminRow[]> {
+  const where = likeClause(['code', 'name'], filter)
+  const limit = windowClause(window)
   const [rows] = await pool.query<any[]>(
     `SELECT code, name, operational_state AS operationalState, is_sandbox AS isSandbox,
             pending_state AS pendingState, pending_by AS pendingBy
-     FROM tb_jurisdiction WHERE deleted = 'N' ORDER BY code`
+     FROM tb_jurisdiction WHERE deleted = 'N'${where.sql} ORDER BY code${limit.sql}`,
+    [...where.params, ...limit.params]
   )
   return rows.map((row) => ({
     code: row.code,
@@ -49,6 +70,15 @@ export async function listJurisdictions(): Promise<JurisdictionAdminRow[]> {
     pendingState: row.pendingState ?? null,
     pendingBy: row.pendingBy ?? null,
   }))
+}
+
+export async function countJurisdictions(filter?: string): Promise<number> {
+  const where = likeClause(['code', 'name'], filter)
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_jurisdiction WHERE deleted = 'N'${where.sql}`,
+    where.params
+  )
+  return Number(rows[0]?.total ?? 0)
 }
 
 export async function findJurisdictionByCode(code: string): Promise<JurisdictionAdminRow | null> {
@@ -90,26 +120,47 @@ export async function setPendingState(
   ])
 }
 
-export async function listRules(filter: {
+export interface RuleListFilters {
   capability?: string
   jurisdictionCode?: string
-}): Promise<LegalRuleRow[]> {
+  /** Text filter (decision 220) on capability / jurisdiction_code / legal_basis. */
+  filter?: string
+}
+
+function ruleWhere(filters: RuleListFilters): { sql: string; params: string[] } {
   const clauses: string[] = [`deleted = 'N'`]
   const params: string[] = []
-  if (filter.capability) {
+  if (filters.capability) {
     clauses.push('capability = ?')
-    params.push(filter.capability)
+    params.push(filters.capability)
   }
-  if (filter.jurisdictionCode) {
+  if (filters.jurisdictionCode) {
     clauses.push('jurisdiction_code = ?')
-    params.push(filter.jurisdictionCode)
+    params.push(filters.jurisdictionCode)
   }
+  const like = likeClause(['capability', 'jurisdiction_code', 'legal_basis'], filters.filter)
+  return { sql: ` WHERE ${clauses.join(' AND ')}${like.sql}`, params: [...params, ...like.params] }
+}
+
+/** No window = the legacy unpaged list (decision 220 keeps it intact). */
+export async function listRules(filters: RuleListFilters, window?: PageWindow): Promise<LegalRuleRow[]> {
+  const where = ruleWhere(filters)
+  const limit = windowClause(window)
   const [rows] = await pool.query<any[]>(
-    `${RULE_SELECT} WHERE ${clauses.join(' AND ')}
-     ORDER BY capability, jurisdiction_code, version DESC`,
-    params
+    `${RULE_SELECT}${where.sql}
+     ORDER BY capability, jurisdiction_code, version DESC${limit.sql}`,
+    [...where.params, ...limit.params]
   )
   return rows.map(toRuleRow)
+}
+
+export async function countRules(filters: RuleListFilters): Promise<number> {
+  const where = ruleWhere(filters)
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_legal_rule${where.sql}`,
+    where.params
+  )
+  return Number(rows[0]?.total ?? 0)
 }
 
 export async function findRuleById(id: number): Promise<LegalRuleRow | null> {
@@ -206,10 +257,17 @@ export async function rejectRule(id: number, actorId: number): Promise<void> {
   )
 }
 
-/** Catalog + the current active rule per capability for one jurisdiction. */
+const CAPABILITY_TEXT_COLUMNS = ['c.capability', 'c.description']
+
+/** Catalog + the current active rule per capability for one jurisdiction.
+ *  No window = the legacy unpaged list (decision 220 keeps it intact). */
 export async function listCapabilityOverview(
-  jurisdictionCode: string
+  jurisdictionCode: string,
+  filter?: string,
+  window?: PageWindow
 ): Promise<CapabilityOverviewRow[]> {
+  const where = likeClause(CAPABILITY_TEXT_COLUMNS, filter)
+  const limit = windowClause(window)
   const [rows] = await pool.query<any[]>(
     `SELECT c.capability, c.description, c.module,
             r.id AS ruleId, r.version AS ruleVersion, r.status AS ruleStatus,
@@ -219,9 +277,9 @@ export async function listCapabilityOverview(
        ON r.capability = c.capability AND r.jurisdiction_code = ?
       AND r.rule_state = 'active' AND r.deleted = 'N'
       AND (r.expires_at IS NULL OR r.expires_at > NOW())
-     WHERE c.deleted = 'N'
-     ORDER BY c.module, c.capability`,
-    [jurisdictionCode]
+     WHERE c.deleted = 'N'${where.sql}
+     ORDER BY c.module, c.capability${limit.sql}`,
+    [jurisdictionCode, ...where.params, ...limit.params]
   )
   return rows.map((row) => ({
     capability: row.capability,
@@ -239,6 +297,17 @@ export async function listCapabilityOverview(
         }
       : null,
   }))
+}
+
+/** The overview is one row per catalog entry (LEFT JOIN), so its total is
+ *  the catalog count — independent of the jurisdiction. */
+export async function countCapabilities(filter?: string): Promise<number> {
+  const where = likeClause(CAPABILITY_TEXT_COLUMNS, filter)
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_legal_capability c WHERE c.deleted = 'N'${where.sql}`,
+    where.params
+  )
+  return Number(rows[0]?.total ?? 0)
 }
 
 /** Migration-022 catalog keys — the sync spec compares them with the TS

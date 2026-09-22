@@ -2,9 +2,18 @@ import * as repository from '@modules/system-modules/system-module.repository'
 import { SystemModuleInput, SystemModuleRow } from '@modules/system-modules/system-module.interface'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
+import { PagedQuery, PagedResult, pagedOrPlain } from '@shared/http/paged-query'
 
-export async function listSystemModules(filter?: string): Promise<SystemModuleRow[]> {
-  return repository.listSystemModules(filter)
+/** Plain array without `page`, `{ items, page, pageSize, total }` with it
+ *  (PS0, decision 220). */
+export async function listSystemModules(
+  query: PagedQuery
+): Promise<SystemModuleRow[] | PagedResult<SystemModuleRow>> {
+  return pagedOrPlain(
+    query,
+    (window) => repository.listSystemModules(query.filter, window),
+    () => repository.countSystemModules(query.filter)
+  )
 }
 
 export async function getSystemModule(id: number): Promise<SystemModuleRow> {

@@ -1,17 +1,35 @@
 import pool from '@shared/db/connection'
 import { UserRow } from '@modules/users/user.interface'
+import { LIMIT_OFFSET_SQL, PageWindow, limitOffsetArgs } from '@shared/http/paged-query'
 
 const BASE_SELECT = `
   SELECT id, name, email, active, locale, last_login_at AS lastLoginAt
   FROM tb_user`
 
-export async function listUsers(filter?: string): Promise<UserRow[]> {
-  const where = filter ? `AND (name LIKE ? OR email LIKE ?)` : ''
+/** Filter on the natural text columns (PS0, decision 220); parameterized. */
+function filterClause(filter?: string): { sql: string; params: string[] } {
+  return filter
+    ? { sql: ` AND (name LIKE ? OR email LIKE ?)`, params: [`%${filter}%`, `%${filter}%`] }
+    : { sql: '', params: [] }
+}
+
+/** No window = the legacy unpaged list (decision 220 keeps it intact). */
+export async function listUsers(filter?: string, window?: PageWindow): Promise<UserRow[]> {
+  const where = filterClause(filter)
   const [rows] = await pool.query<any[]>(
-    `${BASE_SELECT} WHERE deleted = 'N' ${where} ORDER BY name, id`,
-    filter ? [`%${filter}%`, `%${filter}%`] : []
+    `${BASE_SELECT} WHERE deleted = 'N'${where.sql} ORDER BY name, id${window ? ` ${LIMIT_OFFSET_SQL}` : ''}`,
+    window ? [...where.params, ...limitOffsetArgs(window)] : where.params
   )
   return rows
+}
+
+export async function countUsers(filter?: string): Promise<number> {
+  const where = filterClause(filter)
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_user WHERE deleted = 'N'${where.sql}`,
+    where.params
+  )
+  return Number(rows[0]?.total ?? 0)
 }
 
 export async function findUserById(id: number): Promise<UserRow | null> {

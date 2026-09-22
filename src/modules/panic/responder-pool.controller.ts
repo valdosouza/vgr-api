@@ -1,6 +1,10 @@
 import { Request, Response } from 'express'
-import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
-import { responderPoolRequestDto, responderPoolResolveDto } from '@modules/panic/responder-pool.dto'
+import { handleError, parseBody, parseId, parseQuery } from '@shared/http/controller-utils'
+import {
+  responderPoolListQueryDto,
+  responderPoolRequestDto,
+  responderPoolResolveDto,
+} from '@modules/panic/responder-pool.dto'
 import * as service from '@modules/panic/responder-pool.service'
 
 /**
@@ -27,8 +31,10 @@ export async function create(req: Request, res: Response) {
 }
 
 export async function list(req: Request, res: Response) {
+  const query = parseQuery(responderPoolListQueryDto, req, res)
+  if (query === null) return
   try {
-    res.status(200).json({ ok: true, data: await service.listPendingResponderRequests() })
+    res.status(200).json({ ok: true, data: await service.listPendingResponderRequests(query) })
   } catch (err) {
     handleError(res, err, 'panic/responder-pool GET')
   }

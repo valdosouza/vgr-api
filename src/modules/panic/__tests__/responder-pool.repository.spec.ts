@@ -28,3 +28,38 @@ describe('responder-pool.repository — SQL contracts', () => {
     expect(rows).toEqual([{ id: 1, userId: 8, status: 'approved' }])
   })
 })
+
+/** PS0 (decision 220): the pending queue paginates with parameterized LIMIT/OFFSET. */
+describe('responder-pool.repository — pending queue paging (decision 220)', () => {
+  beforeEach(() => jest.resetAllMocks())
+
+  it('findPendingMemberships without a window keeps the unpaged SELECT (legacy)', async () => {
+    mockedPool.query.mockResolvedValue([[]])
+
+    await repository.findPendingMemberships(undefined)
+
+    const [sql, params] = mockedPool.query.mock.calls[0]
+    expect(flat(sql)).toMatch(/WHERE status = 'pending' ORDER BY requested_at$/)
+    expect(params ?? []).toEqual([])
+  })
+
+  it('findPendingMemberships with a window appends LIMIT ? OFFSET ? with the args in order', async () => {
+    mockedPool.query.mockResolvedValue([[]])
+
+    await repository.findPendingMemberships({ limit: 10, offset: 10 })
+
+    const [sql, params] = mockedPool.query.mock.calls[0]
+    expect(flat(sql)).toMatch(/WHERE status = 'pending' ORDER BY requested_at LIMIT \? OFFSET \?$/)
+    expect(params).toEqual([10, 10])
+  })
+
+  it('countPendingMemberships counts only the pending rows', async () => {
+    mockedPool.query.mockResolvedValue([[{ total: '6' }]])
+
+    await expect(repository.countPendingMemberships()).resolves.toBe(6)
+
+    expect(flat(mockedPool.query.mock.calls[0][0])).toBe(
+      "SELECT COUNT(*) AS total FROM tb_responder_pool_membership WHERE status = 'pending'"
+    )
+  })
+})

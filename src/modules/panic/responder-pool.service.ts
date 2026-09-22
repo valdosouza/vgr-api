@@ -1,5 +1,7 @@
 import * as repository from '@modules/panic/responder-pool.repository'
 import { ResponderPoolMembershipRow } from '@modules/panic/responder-pool.interface'
+import { ResponderPoolListQuery } from '@modules/panic/responder-pool.dto'
+import { PAGE_SIZE_DEFAULT, PagedResult, pagedOrPlain } from '@shared/http/paged-query'
 
 export async function requestResponderAuthorization(
   userId: number,
@@ -8,8 +10,16 @@ export async function requestResponderAuthorization(
   return repository.createMembershipRequest(userId, criteriaNotes)
 }
 
-export async function listPendingResponderRequests(): Promise<ResponderPoolMembershipRow[]> {
-  return repository.findPendingMemberships()
+/** Plain array without `page`, `{ items, page, pageSize, total }` with it
+ *  (PS0, decision 220). No query = the legacy unpaged queue. */
+export async function listPendingResponderRequests(
+  query: ResponderPoolListQuery = { pageSize: PAGE_SIZE_DEFAULT }
+): Promise<ResponderPoolMembershipRow[] | PagedResult<ResponderPoolMembershipRow>> {
+  return pagedOrPlain(
+    query,
+    (window) => repository.findPendingMemberships(window),
+    () => repository.countPendingMemberships()
+  )
 }
 
 export async function resolveResponderRequest(id: number, approved: boolean, resolvedBy: number): Promise<void> {

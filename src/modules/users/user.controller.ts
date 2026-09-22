@@ -1,14 +1,20 @@
 import { Request, Response } from 'express'
-import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
-import { userCreateDto, userPrivilegesSyncDto, userUpdateDto } from '@modules/users/user.dto'
+import { handleError, parseBody, parseId, parseQuery } from '@shared/http/controller-utils'
+import {
+  userCreateDto,
+  userListQueryDto,
+  userPrivilegesSyncDto,
+  userUpdateDto,
+} from '@modules/users/user.dto'
 import * as service from '@modules/users/user.service'
 import { ErrorCodes } from '@shared/errors/error-codes'
 import { auditFromRequest } from '@shared/audit/admin-audit'
 
 export async function list(req: Request, res: Response) {
+  const query = parseQuery(userListQueryDto, req, res)
+  if (query === null) return
   try {
-    const filter = typeof req.query.filter === 'string' ? req.query.filter : undefined
-    res.status(200).json({ ok: true, data: await service.listUsers(filter) })
+    res.status(200).json({ ok: true, data: await service.listUsers(query) })
   } catch (err) {
     handleError(res, err, 'users GET')
   }

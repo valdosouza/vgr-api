@@ -7,9 +7,16 @@ import { invalidateSession } from '@shared/acl/session-store'
 import { InterfaceKeys, Privileges } from '@shared/acl/privileges'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
+import { PagedQuery, PagedResult, pagedOrPlain } from '@shared/http/paged-query'
 
-export async function listUsers(filter?: string): Promise<UserRow[]> {
-  return repository.listUsers(filter)
+/** Plain array without `page`, `{ items, page, pageSize, total }` with it
+ *  (PS0, decision 220). */
+export async function listUsers(query: PagedQuery): Promise<UserRow[] | PagedResult<UserRow>> {
+  return pagedOrPlain(
+    query,
+    (window) => repository.listUsers(query.filter, window),
+    () => repository.countUsers(query.filter)
+  )
 }
 
 export async function getUser(id: number): Promise<UserRow> {

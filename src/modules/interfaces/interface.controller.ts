@@ -1,13 +1,14 @@
 import { Request, Response } from 'express'
-import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
-import { interfaceSaveDto } from '@modules/interfaces/interface.dto'
+import { handleError, parseBody, parseId, parseQuery } from '@shared/http/controller-utils'
+import { interfaceListQueryDto, interfaceSaveDto } from '@modules/interfaces/interface.dto'
 import { auditFromRequest } from '@shared/audit/admin-audit'
 import * as service from '@modules/interfaces/interface.service'
 
 export async function list(req: Request, res: Response) {
+  const query = parseQuery(interfaceListQueryDto, req, res)
+  if (query === null) return
   try {
-    const filter = typeof req.query.filter === 'string' ? req.query.filter : undefined
-    res.status(200).json({ ok: true, data: await service.listInterfaces(filter) })
+    res.status(200).json({ ok: true, data: await service.listInterfaces(query) })
   } catch (err) {
     handleError(res, err, 'interfaces GET')
   }

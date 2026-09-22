@@ -80,6 +80,23 @@ panic/responder-pool, dual-control-access, monetization-config) now use
   deleted (409); modules can — their screens fall back to `group_default`.
 - Deactivated (`active='N'`) accounts get the same generic 401 on login.
 
+## PAGINATION (PS0, decision 220, 2026-09-21)
+`GET /api/privileges`, `GET /api/interfaces`, `GET /api/system-modules` and
+`GET /api/users` accept optional `page` (int >= 1), `pageSize` (1..100,
+default 20) and `filter` (trimmed, max 100; LIKE on `description` /
+`description, i18n_key` / `description` / `name, email` respectively).
+Without `page` the response is EXACTLY what it was — `{ ok, data: T[] }`,
+optionally narrowed by `filter` — so the current Flutter screens keep
+working until they migrate. With `page`, `data` becomes
+`{ items: T[], page, pageSize, total }` (`total` = rows matching the filter
+regardless of the page). Invalid `page`/`pageSize`/`filter` → the shared 422
+`VALIDATION_FAILED` envelope (`parseQuery`, decisions 80/83). Shared helper:
+`src/shared/http/paged-query.ts` (`pagedQueryDto`, `PagedResult`,
+`pagedOrPlain`); SQL stays parameterized (`LIMIT ? OFFSET ?`, decision 110)
+and soft-delete filters are preserved. Fixed catalogs (risk-config,
+category-forms, monetization-config) are deliberately NOT paginated.
+Specs: `*.list.spec.ts` (SQL), `*.routes.spec.ts` (HTTP), `*.service.spec.ts`.
+
 ## STATUS
 - Phase 1 of the admin-controls plan
   (`AI\docs\plans\plano-controles-administrativos.md`) — DONE (this document).

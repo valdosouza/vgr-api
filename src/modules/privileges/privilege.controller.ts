@@ -1,13 +1,14 @@
 import { Request, Response } from 'express'
-import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
-import { privilegeSaveDto } from '@modules/privileges/privilege.dto'
+import { handleError, parseBody, parseId, parseQuery } from '@shared/http/controller-utils'
+import { privilegeListQueryDto, privilegeSaveDto } from '@modules/privileges/privilege.dto'
 import { auditFromRequest } from '@shared/audit/admin-audit'
 import * as service from '@modules/privileges/privilege.service'
 
 export async function list(req: Request, res: Response) {
+  const query = parseQuery(privilegeListQueryDto, req, res)
+  if (query === null) return
   try {
-    const filter = typeof req.query.filter === 'string' ? req.query.filter : undefined
-    res.status(200).json({ ok: true, data: await service.listPrivileges(filter) })
+    res.status(200).json({ ok: true, data: await service.listPrivileges(query) })
   } catch (err) {
     handleError(res, err, 'privileges GET')
   }

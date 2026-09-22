@@ -1,5 +1,6 @@
 import pool from '@shared/db/connection'
 import { InterfaceRow } from '@modules/interfaces/interface.interface'
+import { LIMIT_OFFSET_SQL, PageWindow, limitOffsetArgs } from '@shared/http/paged-query'
 
 function toRow(row: any): InterfaceRow {
   return {
@@ -21,13 +22,32 @@ const BASE_SELECT = `
           WHERE ihp.tb_interface_id = i.id AND ihp.deleted = 'N') AS privilegeIds
   FROM tb_interface i`
 
-export async function listInterfaces(filter?: string): Promise<InterfaceRow[]> {
-  const where = filter ? `AND (i.description LIKE ? OR i.i18n_key LIKE ?)` : ''
+/** Filter on the natural text columns (PS0, decision 220); parameterized. */
+function filterClause(filter?: string): { sql: string; params: string[] } {
+  return filter
+    ? { sql: ` AND (i.description LIKE ? OR i.i18n_key LIKE ?)`, params: [`%${filter}%`, `%${filter}%`] }
+    : { sql: '', params: [] }
+}
+
+/** No window = the legacy unpaged list (decision 220 keeps it intact). */
+export async function listInterfaces(filter?: string, window?: PageWindow): Promise<InterfaceRow[]> {
+  const where = filterClause(filter)
   const [rows] = await pool.query<any[]>(
-    `${BASE_SELECT} WHERE i.deleted = 'N' ${where} ORDER BY i.group_default, i.position, i.id`,
-    filter ? [`%${filter}%`, `%${filter}%`] : []
+    `${BASE_SELECT} WHERE i.deleted = 'N'${where.sql} ORDER BY i.group_default, i.position, i.id${
+      window ? ` ${LIMIT_OFFSET_SQL}` : ''
+    }`,
+    window ? [...where.params, ...limitOffsetArgs(window)] : where.params
   )
   return rows.map(toRow)
+}
+
+export async function countInterfaces(filter?: string): Promise<number> {
+  const where = filterClause(filter)
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_interface i WHERE i.deleted = 'N'${where.sql}`,
+    where.params
+  )
+  return Number(rows[0]?.total ?? 0)
 }
 
 export async function findInterfaceById(id: number): Promise<InterfaceRow | null> {

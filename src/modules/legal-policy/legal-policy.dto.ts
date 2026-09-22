@@ -1,4 +1,28 @@
 import { z } from 'zod'
+import { pagedQueryDto } from '@shared/http/paged-query'
+
+/**
+ * List queries (PS0, decision 220): optional page/pageSize; `filter` is
+ * matched on each resource's natural text columns (jurisdiction: code /
+ * name; capability: capability / description; rule: capability /
+ * jurisdiction_code / legal_basis). No `page` keeps the legacy shape.
+ */
+export const jurisdictionListQueryDto = pagedQueryDto
+
+/** `jurisdiction` stays mandatory — the overview is per jurisdiction. */
+export const capabilityListQueryDto = pagedQueryDto.extend({
+  jurisdiction: z.string().min(1).max(10),
+})
+
+/** The pre-existing exact filters remain, alongside the text filter. */
+export const ruleListQueryDto = pagedQueryDto.extend({
+  capability: z.string().min(1).max(80).optional(),
+  jurisdiction: z.string().min(1).max(10).optional(),
+})
+
+export type JurisdictionListQuery = z.infer<typeof jurisdictionListQueryDto>
+export type CapabilityListQuery = z.infer<typeof capabilityListQueryDto>
+export type RuleListQuery = z.infer<typeof ruleListQueryDto>
 
 /** Propose a rule (decision 107 — born 'proposed', enforced only after a
  *  different user approves). Reason is mandatory whenever not allowed

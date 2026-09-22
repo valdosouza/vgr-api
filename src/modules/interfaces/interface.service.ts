@@ -3,9 +3,18 @@ import { InterfaceInput, InterfaceRow } from '@modules/interfaces/interface.inte
 import { invalidateAllPrivileges } from '@shared/acl/privilege-store'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
+import { PagedQuery, PagedResult, pagedOrPlain } from '@shared/http/paged-query'
 
-export async function listInterfaces(filter?: string): Promise<InterfaceRow[]> {
-  return repository.listInterfaces(filter)
+/** Plain array without `page`, `{ items, page, pageSize, total }` with it
+ *  (PS0, decision 220). */
+export async function listInterfaces(
+  query: PagedQuery
+): Promise<InterfaceRow[] | PagedResult<InterfaceRow>> {
+  return pagedOrPlain(
+    query,
+    (window) => repository.listInterfaces(query.filter, window),
+    () => repository.countInterfaces(query.filter)
+  )
 }
 
 export async function getInterface(id: number): Promise<InterfaceRow> {

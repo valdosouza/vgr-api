@@ -1,5 +1,6 @@
 import pool from '@shared/db/connection'
 import { ResponderPoolMembershipRow } from '@modules/panic/responder-pool.interface'
+import { LIMIT_OFFSET_SQL, PageWindow, limitOffsetArgs } from '@shared/http/paged-query'
 
 export async function createMembershipRequest(
   userId: number,
@@ -20,12 +21,23 @@ export async function createMembershipRequest(
   }
 }
 
-export async function findPendingMemberships(): Promise<ResponderPoolMembershipRow[]> {
+/** No window = the legacy unpaged queue (decision 220 keeps it intact). */
+export async function findPendingMemberships(window?: PageWindow): Promise<ResponderPoolMembershipRow[]> {
   const [rows] = await pool.query<any[]>(
     `SELECT id, user_id AS userId, status, criteria_notes AS criteriaNotes, requested_at AS requestedAt, resolved_at AS resolvedAt, resolved_by AS resolvedBy
-     FROM tb_responder_pool_membership WHERE status = 'pending' ORDER BY requested_at`
+     FROM tb_responder_pool_membership WHERE status = 'pending' ORDER BY requested_at${
+       window ? ` ${LIMIT_OFFSET_SQL}` : ''
+     }`,
+    window ? limitOffsetArgs(window) : []
   )
   return rows
+}
+
+export async function countPendingMemberships(): Promise<number> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_responder_pool_membership WHERE status = 'pending'`
+  )
+  return Number(rows[0]?.total ?? 0)
 }
 
 export async function resolveMembership(id: number, approved: boolean, resolvedBy: number): Promise<void> {

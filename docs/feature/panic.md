@@ -222,6 +222,21 @@ stored or echoed, cursor forwarding, never mounted under `/api`),
 `capabilities.catalog.spec` (`panic.dispatch` WIRED and still correctly
 seeded, no duplicate seed row).
 
+## Pagination of the admin queue (PS0, decision 220, 2026-09-21)
+
+`GET /api/panic/responder-pool` accepts optional `page` (>= 1) and
+`pageSize` (1..100, default 20). Without `page` it answers exactly what it
+did — `{ ok, data: ResponderPoolMembershipRow[] }`; with it, `data` becomes
+`{ items, page, pageSize, total }` (`total` = pending rows). Invalid values
+→ the shared 422 `VALIDATION_FAILED` envelope. **No text `filter` here**:
+the queue row carries only `userId` (the app account id) and free-text
+`criteriaNotes` — no applicant name or email is joined — so the schema drops
+`filter` rather than pretend to match on nothing. Adding the applicant's
+display name to the row is a separate, later decision. Repository:
+`findPendingMemberships(window?)` + `countPendingMemberships()`, SQL
+parameterized (`LIMIT ? OFFSET ?`). Specs: `responder-pool.repository.spec`,
+`responder-pool.service.spec`, `responder-pool.controller.spec`.
+
 ## Deliberately out (this round, decisions 193/194/199)
 
 - **Trusted-contact recipient mode** (decision 64's second delivery mode)

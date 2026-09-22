@@ -3,9 +3,18 @@ import { PrivilegeRow } from '@modules/privileges/privilege.interface'
 import { invalidateAllPrivileges } from '@shared/acl/privilege-store'
 import { HttpError } from '@shared/errors/http-error'
 import { ErrorCodes } from '@shared/errors/error-codes'
+import { PagedQuery, PagedResult, pagedOrPlain } from '@shared/http/paged-query'
 
-export async function listPrivileges(filter?: string): Promise<PrivilegeRow[]> {
-  return repository.listPrivileges(filter)
+/** Plain array without `page`, `{ items, page, pageSize, total }` with it
+ *  (PS0, decision 220). */
+export async function listPrivileges(
+  query: PagedQuery
+): Promise<PrivilegeRow[] | PagedResult<PrivilegeRow>> {
+  return pagedOrPlain(
+    query,
+    (window) => repository.listPrivileges(query.filter, window),
+    () => repository.countPrivileges(query.filter)
+  )
 }
 
 export async function getPrivilege(id: number): Promise<PrivilegeRow> {

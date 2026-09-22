@@ -1,5 +1,6 @@
 import pool from '@shared/db/connection'
 import { SystemModuleRow } from '@modules/system-modules/system-module.interface'
+import { LIMIT_OFFSET_SQL, PageWindow, limitOffsetArgs } from '@shared/http/paged-query'
 
 function toRow(row: any): SystemModuleRow {
   return {
@@ -19,13 +20,30 @@ const BASE_SELECT = `
           WHERE mhi.tb_module_id = m.id AND mhi.deleted = 'N' AND mhi.active = 'S') AS interfaceIds
   FROM tb_module m`
 
-export async function listSystemModules(filter?: string): Promise<SystemModuleRow[]> {
-  const where = filter ? `AND m.description LIKE ?` : ''
+/** Filter on the natural text column (PS0, decision 220); parameterized. */
+function filterClause(filter?: string): { sql: string; params: string[] } {
+  return filter ? { sql: ` AND m.description LIKE ?`, params: [`%${filter}%`] } : { sql: '', params: [] }
+}
+
+/** No window = the legacy unpaged list (decision 220 keeps it intact). */
+export async function listSystemModules(filter?: string, window?: PageWindow): Promise<SystemModuleRow[]> {
+  const where = filterClause(filter)
   const [rows] = await pool.query<any[]>(
-    `${BASE_SELECT} WHERE m.deleted = 'N' ${where} ORDER BY m.position, m.id`,
-    filter ? [`%${filter}%`] : []
+    `${BASE_SELECT} WHERE m.deleted = 'N'${where.sql} ORDER BY m.position, m.id${
+      window ? ` ${LIMIT_OFFSET_SQL}` : ''
+    }`,
+    window ? [...where.params, ...limitOffsetArgs(window)] : where.params
   )
   return rows.map(toRow)
+}
+
+export async function countSystemModules(filter?: string): Promise<number> {
+  const where = filterClause(filter)
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS total FROM tb_module m WHERE m.deleted = 'N'${where.sql}`,
+    where.params
+  )
+  return Number(rows[0]?.total ?? 0)
 }
 
 export async function findSystemModuleById(id: number): Promise<SystemModuleRow | null> {

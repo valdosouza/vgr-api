@@ -1,5 +1,9 @@
 import { z } from 'zod'
 import { newPasswordSchema } from '@shared/security/password-policy'
+import { pagedQueryDto } from '@shared/http/paged-query'
+
+/** GET / query (PS0, decision 220): optional page/pageSize, filter on name / email. */
+export const userListQueryDto = pagedQueryDto
 
 const baseUser = {
   name: z.string().min(2).max(120),

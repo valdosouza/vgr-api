@@ -458,6 +458,8 @@
   - When: `POST /app-chat/:reportId/messages` is called by H (find-or-create, 173), then `GET /app-chat/:reportId/threads` and `GET /app-chat/threads/:threadId/messages` by the Reporter (account or `x-client-key`)
   - Then: the Reporter's response shows H's message under a `participantToken`, never H's raw account id; H's `displayName` only when H chose it and the tier is not high (170)
 
+- [x] Should paginate the growing panel lists only when asked — `GET /api/privileges`, `/api/interfaces`, `/api/system-modules`, `/api/users`, `/api/legal-policy/{jurisdictions,capabilities,rules}` and `/api/panic/responder-pool` keep their plain `data: T[]` shape without `page`, answer `data: { items, page, pageSize, total }` with `page` (`pageSize` 1..100, default 20, `filter` trimmed max 100 with LIKE on the natural text columns; the responder pool has no filter — no applicant name is joined), and answer 422 `VALIDATION_FAILED` for `pageSize=1000`; fixed catalogs (risk-config, category-forms, monetization-config) stay un-paginated (amended 2026-09-21, PS0 decision 220 — `paged-query.spec`, `privilege.routes.spec`, `interface.routes.spec`, `system-module.routes.spec`, `user.routes.spec`, `legal-policy.routes.spec`, `responder-pool.controller.spec`, plus the `*.list.spec` SQL contracts)
+
 ### 3.2 Alternative and Error Flows
 
 - [ ] Should return 403 when a Helper who is also the Report's Reporter attempts to submit a HelpOffer on their own Report

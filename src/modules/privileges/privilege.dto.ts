@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import { pagedQueryDto } from '@shared/http/paged-query'
+
+/** GET / query (PS0, decision 220): optional page/pageSize, filter on description. */
+export const privilegeListQueryDto = pagedQueryDto
 
 export const privilegeSaveDto = z.object({
   // Uppercase identifier: it is referenced by name across API guards and

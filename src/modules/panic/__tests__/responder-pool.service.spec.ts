@@ -89,3 +89,42 @@ describe('responder-pool.service', () => {
     expect(active[0].status).toBe('approved')
   })
 })
+
+/** PS0 (decision 220): the admin queue paginates; no text filter (the
+ *  row carries no applicant name/email — the list is not joined). */
+describe('responder-pool.service listPendingResponderRequests paging (decision 220)', () => {
+  beforeEach(() => jest.resetAllMocks())
+
+  const pending = {
+    id: 1,
+    userId: 42,
+    status: 'pending' as const,
+    criteriaNotes: null,
+    requestedAt: new Date(),
+    resolvedAt: null,
+    resolvedBy: null,
+  }
+
+  it('without page returns the plain array and never counts', async () => {
+    mockedRepository.findPendingMemberships.mockResolvedValue([pending])
+
+    await expect(listPendingResponderRequests({ pageSize: 20 })).resolves.toEqual([pending])
+
+    expect(mockedRepository.findPendingMemberships).toHaveBeenCalledWith(undefined)
+    expect(mockedRepository.countPendingMemberships).not.toHaveBeenCalled()
+  })
+
+  it('with page=2&pageSize=10 passes LIMIT 10 OFFSET 10 and returns the paged shape', async () => {
+    mockedRepository.countPendingMemberships.mockResolvedValue(11)
+    mockedRepository.findPendingMemberships.mockResolvedValue([pending])
+
+    await expect(listPendingResponderRequests({ page: 2, pageSize: 10 })).resolves.toEqual({
+      items: [pending],
+      page: 2,
+      pageSize: 10,
+      total: 11,
+    })
+
+    expect(mockedRepository.findPendingMemberships).toHaveBeenCalledWith({ limit: 10, offset: 10 })
+  })
+})

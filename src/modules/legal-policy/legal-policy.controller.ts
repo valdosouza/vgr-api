@@ -1,6 +1,12 @@
 import { Request, Response } from 'express'
-import { handleError, parseBody, parseId } from '@shared/http/controller-utils'
-import { jurisdictionStateDto, legalRuleProposalDto } from '@modules/legal-policy/legal-policy.dto'
+import { handleError, parseBody, parseId, parseQuery } from '@shared/http/controller-utils'
+import {
+  capabilityListQueryDto,
+  jurisdictionListQueryDto,
+  jurisdictionStateDto,
+  legalRuleProposalDto,
+  ruleListQueryDto,
+} from '@modules/legal-policy/legal-policy.dto'
 import * as service from '@modules/legal-policy/legal-policy.service'
 import { auditFromRequest } from '@shared/audit/admin-audit'
 
@@ -12,13 +18,10 @@ function actorId(req: Request): number {
 // ---------------------------------------------------------------- rules
 
 export async function listRules(req: Request, res: Response) {
+  const query = parseQuery(ruleListQueryDto, req, res)
+  if (query === null) return
   try {
-    const filter = {
-      capability: typeof req.query.capability === 'string' ? req.query.capability : undefined,
-      jurisdictionCode:
-        typeof req.query.jurisdiction === 'string' ? req.query.jurisdiction : undefined,
-    }
-    res.status(200).json({ ok: true, data: await service.listRules(filter) })
+    res.status(200).json({ ok: true, data: await service.listRules(query) })
   } catch (err) {
     handleError(res, err, 'legal-policy rules GET')
   }
@@ -56,9 +59,11 @@ export async function rejectRule(req: Request, res: Response) {
 
 // -------------------------------------------------------- jurisdictions
 
-export async function listJurisdictions(_req: Request, res: Response) {
+export async function listJurisdictions(req: Request, res: Response) {
+  const query = parseQuery(jurisdictionListQueryDto, req, res)
+  if (query === null) return
   try {
-    res.status(200).json({ ok: true, data: await service.listJurisdictions() })
+    res.status(200).json({ ok: true, data: await service.listJurisdictions(query) })
   } catch (err) {
     handleError(res, err, 'legal-policy jurisdictions GET')
   }
@@ -88,21 +93,14 @@ export async function confirmState(req: Request, res: Response) {
 
 // --------------------------------------------------------- capabilities
 
+/** `jurisdiction` is mandatory: a missing one is the same 422 REQUIRED
+ *  envelope as before (now emitted by parseQuery, decision 83). */
 export async function listCapabilities(req: Request, res: Response) {
+  const query = parseQuery(capabilityListQueryDto, req, res)
+  if (query === null) return
   try {
-    const jurisdiction =
-      typeof req.query.jurisdiction === 'string' && req.query.jurisdiction
-        ? req.query.jurisdiction
-        : null
-    if (!jurisdiction) {
-      res.status(422).json({
-        error: 'jurisdiction query parameter is required',
-        code: 'VALIDATION_FAILED',
-        fields: [{ field: 'jurisdiction', message: 'Required', code: 'REQUIRED' }],
-      })
-      return
-    }
-    res.status(200).json({ ok: true, data: await service.listCapabilities(jurisdiction) })
+    const { jurisdiction, ...paging } = query
+    res.status(200).json({ ok: true, data: await service.listCapabilities(jurisdiction, paging) })
   } catch (err) {
     handleError(res, err, 'legal-policy capabilities GET')
   }

@@ -226,3 +226,92 @@ describe('legal-policy.service — kill switch (decision 107)', () => {
     })
   })
 })
+
+/** PS0 (decision 220): the three lists compose the two shapes. */
+describe('legal-policy.service — list paging (decision 220)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks()
+  })
+
+  it('listJurisdictions without page returns the plain array and never counts', async () => {
+    mockedRepository.listJurisdictions.mockResolvedValue([jurisdictionRow()])
+
+    await expect(service.listJurisdictions({ pageSize: 20 })).resolves.toEqual([jurisdictionRow()])
+
+    expect(mockedRepository.listJurisdictions).toHaveBeenCalledWith(undefined, undefined)
+    expect(mockedRepository.countJurisdictions).not.toHaveBeenCalled()
+  })
+
+  it('listJurisdictions with page passes the window and returns the paged shape', async () => {
+    mockedRepository.countJurisdictions.mockResolvedValue(3)
+    mockedRepository.listJurisdictions.mockResolvedValue([jurisdictionRow()])
+
+    await expect(service.listJurisdictions({ page: 2, pageSize: 2, filter: 'br' })).resolves.toEqual({
+      items: [jurisdictionRow()],
+      page: 2,
+      pageSize: 2,
+      total: 3,
+    })
+
+    expect(mockedRepository.countJurisdictions).toHaveBeenCalledWith('br')
+    expect(mockedRepository.listJurisdictions).toHaveBeenCalledWith('br', { limit: 2, offset: 2 })
+  })
+
+  it('listCapabilities still 404s an unknown jurisdiction before any list or count', async () => {
+    mockedRepository.findJurisdictionByCode.mockResolvedValue(null)
+
+    await expect(service.listCapabilities('XX', { page: 1, pageSize: 20 })).rejects.toMatchObject({
+      statusCode: 404,
+    })
+    expect(mockedRepository.listCapabilityOverview).not.toHaveBeenCalled()
+    expect(mockedRepository.countCapabilities).not.toHaveBeenCalled()
+  })
+
+  it('listCapabilities with page passes jurisdiction, filter and window; total counts the catalog', async () => {
+    mockedRepository.findJurisdictionByCode.mockResolvedValue(jurisdictionRow())
+    mockedRepository.countCapabilities.mockResolvedValue(14)
+    mockedRepository.listCapabilityOverview.mockResolvedValue([])
+
+    await expect(
+      service.listCapabilities('BR', { page: 2, pageSize: 10, filter: 'reward' })
+    ).resolves.toEqual({ items: [], page: 2, pageSize: 10, total: 14 })
+
+    expect(mockedRepository.countCapabilities).toHaveBeenCalledWith('reward')
+    expect(mockedRepository.listCapabilityOverview).toHaveBeenCalledWith('BR', 'reward', {
+      limit: 10,
+      offset: 10,
+    })
+  })
+
+  it('listRules without page keeps the exact filters and the plain array', async () => {
+    const rule = ruleRow()
+    mockedRepository.listRules.mockResolvedValue([rule])
+
+    await expect(
+      service.listRules({ pageSize: 20, capability: 'chat.masked', jurisdiction: 'BR' })
+    ).resolves.toEqual([rule])
+
+    expect(mockedRepository.listRules).toHaveBeenCalledWith(
+      { capability: 'chat.masked', jurisdictionCode: 'BR', filter: undefined },
+      undefined
+    )
+    expect(mockedRepository.countRules).not.toHaveBeenCalled()
+  })
+
+  it('listRules with page passes the window and returns the paged shape', async () => {
+    const rule = ruleRow()
+    mockedRepository.countRules.mockResolvedValue(21)
+    mockedRepository.listRules.mockResolvedValue([rule])
+
+    await expect(service.listRules({ page: 3, pageSize: 10, filter: 'LGPD' })).resolves.toEqual({
+      items: [rule],
+      page: 3,
+      pageSize: 10,
+      total: 21,
+    })
+
+    const filters = { capability: undefined, jurisdictionCode: undefined, filter: 'LGPD' }
+    expect(mockedRepository.countRules).toHaveBeenCalledWith(filters)
+    expect(mockedRepository.listRules).toHaveBeenCalledWith(filters, { limit: 10, offset: 20 })
+  })
+})

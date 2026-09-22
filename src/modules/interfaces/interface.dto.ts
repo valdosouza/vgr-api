@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import { pagedQueryDto } from '@shared/http/paged-query'
+
+/** GET / query (PS0, decision 220): optional page/pageSize, filter on description / i18n_key. */
+export const interfaceListQueryDto = pagedQueryDto
 
 export const interfaceSaveDto = z.object({
   description: z.string().min(2).max(120),
