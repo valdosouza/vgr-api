@@ -167,9 +167,19 @@
 - [ ] Should accept confirm() with mode=peer_to_peer when the Report's RiskTierConfig is low or medium
 
 **DualControlAccessRequest**
+> **Amended, 2026-10-04** (round 18, decisions 223–229 — DC1): the three
+> items below described approverIds typed into the request body, which let
+> one admin approve twice and grant alone. Superseded: requester and
+> approver come from the session, opening the request is the first
+> authorization and ONE approval by a different user grants (224); the
+> pre-round-18 requests were voided (225). Replaced by the `[x]` items
+> right after them (`dual-control.service.spec`).
 - [ ] Should remain ungrantable with only 1 recorded approverId, even with a valid legalBasis
 - [ ] Should reject recording the same approverId twice toward the 2-approver threshold
 - [ ] Should become grantable only when 2 distinct approverIds and a non-empty legalBasis are present
+- [x] Should record the session user as requester of a new pending request, and refuse a request for an accountability entry that does not exist (404 `NOT_FOUND`) (decisions 223/226)
+- [x] Should grant on ONE approval by a user other than the requester, and refuse the requester approving their own request (422 `BUSINESS_RULE`) — two distinct people, never one (224)
+- [x] Should refuse approving a request that is not pending — granted, or voided by migration 050 (409 `BUSINESS_RULE`) (224/225)
 
 ### 1.2 Value Objects
 
@@ -280,7 +290,15 @@
 - [ ] Should persist a PaymentIntent's mode and confirmation state accurately
 
 **DualControlAccessRepository**
+> **Amended, 2026-10-04** (round 18, decisions 224/226): the grant row keeps
+> both identities (`requested_by`, `approved_by`/`approved_at`) and the
+> opening and the approval go to `tb_admin_audit`; a REFUSED attempt is not
+> logged here — logging every decryption attempt belongs to the reveal,
+> which decision 228 left for its own round. Covered by the `[x]` items
+> (`dual-control.repository.spec`, migration 050 verified on MySQL 8.0).
 - [ ] Should append each approval attempt (granted or denied) permanently, including both approver identities on grant
+- [x] Should grant with a conditional write on `status = 'pending'`, so the loser of two simultaneous approvals changes nothing and gets 409 (224)
+- [x] Should store the requester and the approver as user ids and list them by NAME, newest first, never e-mail; a CHECK refuses a granted row approved by its own requester (224/227)
 
 ### 2.2 Use Cases
 
@@ -332,7 +350,10 @@
 - [ ] Should reject before any persistence when a peer_to_peer PaymentIntent is attempted on a high-tier Report
 
 **RequestDualControlAccess → DualControlAccessRepository**
+> **Amended, 2026-10-04** (round 18, decision 224): the sequence is now
+> request (first authorization) → one approval by another user.
 - [ ] Should execute the full 2-approval sequence → DualControlAccessGranted emitted only after the second distinct approval
+- [x] Should execute request by user A → approval by user B → granted, with A's own approval refused before it (exercised against MySQL 8.0 in DC1; unit coverage in `dual-control.service.spec`)
 
 **AdminLogin → AdminAccountRepository** (amendment, task 33, decision 67)
 - [ ] Should execute AdminLogin → credentials verified against AdminAccountRepository → JWT issued with role=admin
@@ -474,7 +495,10 @@
 - [ ] Should return 409 when attempting to revoke() a Reward after a qualifying HelpOffer already exists (decision 30)
 - [ ] Should return 422 when a PaymentIntent with mode=peer_to_peer is requested for a high-tier Report (decision 58)
 - [ ] Should return 403 when a non-admin caller attempts any `/api/risk-config/*`, `/api/category-forms/*`, `/api/dual-control-access/*`, `/api/monetization-config/*` (amendment, task 32), or admin-only `/api/panic/responder-pool/*` endpoint (amended 2026-09-04: list/resolve ONLY — the request endpoint moved off `/api` entirely to `POST /app-panic/responder-pool`, `appAuthMiddleware`-gated, see the ResponderPoolMembership plane-fix note above; a plain 404, not 403, is what `POST /api/panic/responder-pool` answers now — `responder-pool.controller.spec`)
+> **Amended, 2026-10-04** (round 18): the item below is superseded — there
+> is no `approverId` in the body any more; the `[x]` item after it holds.
 - [ ] Should return 409 when a second approval attempt on `/api/dual-control-access/:id` reuses an approverId already recorded on that request
+- [x] Should take the dual-control requester and approver from the session, ignoring any `approverId` in the body; answer 422 `BUSINESS_RULE` for a self-approval and 409 `BUSINESS_RULE` for a request that is not pending; page `GET /api/dual-control-access` only when asked (decision 220, filter on the legal basis); and write one `tb_admin_audit` row per successful request/approval, none on a refusal (amended 2026-10-04, decisions 223–227 — `dual-control.controller.spec`)
 
 ### 3.3 Security Scenarios
 

@@ -270,6 +270,8 @@ function processRewardPayment(intent: PaymentIntent, tier: RiskTier): void {
 function requestDualControlAccess(req: DualControlAccessRequest): void {
   // throws InsufficientApprovalError unless 2 distinct adminIds + a legalBasis are recorded (decision 45)
 }
+// Amended 2026-10-04 (round 18, 223/224): the two people are the REQUESTER (session user who opens it, the first
+// authorization) and ONE approver who is a different session user — dual-control.service.ts approveDualControlRequest.
 ```
 
 ## Section 4 — Events / Messages / Async Flows
@@ -290,7 +292,7 @@ function requestDualControlAccess(req: DualControlAccessRequest): void {
 | PanicAlertTriggered | TriggerPanicAlert succeeds | `{ alertId, triggeredBy, recipients[], position }` | Notification delivery (out of MVP scope beyond in-app). **Implemented 2026-09-04**: no event bus — the row IS the notification surface: `tb_panic_alert_recipient` is the trigger-time snapshot of `recipients[]`, read back by `GET /app-panic/alerts` (cursor polling, 192, no push/SSE/websocket); the HTTP trigger answer is `{ alertId, createdAt, recipientCount }` — `recipients[]` and raw `position` never leave the API (platform-wide identity/position minimization) |
 | ChatMessagePosted | PostChatMessage succeeds | `{ threadId, maskedSenderToken, sentAt }` | ChatThread participants |
 | PaymentIntentConfirmed | ProcessRewardPayment succeeds | `{ intentId, rewardId, mode, feeRetained? }` | Reward (marks payout complete) |
-| DualControlAccessGranted | RequestDualControlAccess succeeds | `{ requestId, approverIds[], legalBasis }` | AccountabilityLog (audit trail, permanent) |
+| DualControlAccessGranted | RequestDualControlAccess succeeds | `{ requestId, approverIds[], legalBasis }` | AccountabilityLog (audit trail, permanent). **Amended 2026-10-04 (round 18, 224/226)**: no event bus — the row IS the grant (`requested_by`, `approved_by`, `approved_at`), and the opening and the approval each write `tb_admin_audit` (`state_change` on `dual_control_access`) |
 
 ## Section 5 — Persistence / Repository Interfaces
 

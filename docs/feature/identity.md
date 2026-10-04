@@ -22,7 +22,7 @@ No repository/routes/migration for `identity.*` in task 11's scope — pure doma
   - `transitionRole`: rejects any transition to `police` outright (403, deferred per decision 12); rejects a transition from `anonymous` to anything other than `reporter`/`helper`.
 - Consumed by: API task 27 (`ResponderPoolMembership` workflow, needs `Role`/`UserIdentity` to gate who can request Authorized Responder status).
 - Task 12 (`AccountabilityLogEntry` append-only log) — DONE, but narrower than its own acceptance criterion. `appendAccountabilityLogEntry` is built and unit-tested (writes `actionType`/`ipAddress`/`metadata`), and the "never queryable through any repository method used by a public-facing controller" guarantee is enforced structurally (no `.controller.ts`/`.dto.ts`/`.routes.ts` file exists for this module, verified by a test that asserts so). What's **not** done: "Entry is written on every anonymous Report/HelpOffer submission" can't be wired up or verified yet — `SubmitReport`/`SubmitHelpOffer` (tasks 03/06) don't exist. Revisit this module then to actually call `appendAccountabilityLogEntry` from those use cases.
-- Consumed by: API task 31 (`DualControlAccessRequest` workflow needed a task-12 dependency per the tactical design, satisfied by this module existing — it does not call into it directly; see `dual-control-access.md`).
+- Consumed by: API task 31 (`DualControlAccessRequest` workflow needed a task-12 dependency per the tactical design, satisfied by this module existing. Since round 18 (decision 226) the gate checks that the referenced entry EXISTS (`SELECT 1` by id) — it still never reads an entry's content; see `dual-control-access.md`).
 
 ## REFERENCES
 - [**README.md**](../README.md): Documentation navigation index.
