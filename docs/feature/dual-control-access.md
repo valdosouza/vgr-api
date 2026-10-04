@@ -41,7 +41,7 @@ Mounted at `/api/dual-control-access` (panel plane, `authMiddleware`). Guards (d
 
 ## STATUS
 - Task 31 (`DualControlAccessRequest` workflow) — DONE; rebuilt by round 18 / DC1 (2026-10-04).
-- Panel: the screen still speaks the old contract (one request in the bloc, an approver text field) until DC2 — list + propose form + approve on the row (227) — is released. Until then the old screen cannot read the new rows (`approverIds` is gone).
+- Panel: DC2 (app `eb9d8f1`) — list + request form + approve on the row, disabled on your own request (227); see the app's `docs/feature/dual-control-access.md`.
 - Reveal (decrypting a granted entry): out of scope, decision 228.
 
 ## REFERENCES
