@@ -34,7 +34,7 @@ Mounted at `/api/dual-control-access` (panel plane, `authMiddleware`). Guards (d
 
 ## KEY BEHAVIORS
 - **One person never grants alone** — enforced twice: the service refuses the requester as approver (422), and `chk_dual_control_two_people` (migration 050) refuses any `granted` row whose `approved_by` is missing or equals `requested_by`, so even a service bug cannot store a one-person grant. `chk_dual_control_requester` keeps every live request tied to who opened it.
-- **No lost approvals**: approving is a conditional write (`… WHERE id = ? AND status = 'pending'`); of two simultaneous approvals one wins, the other gets 409 (verified against MySQL 8.0 with two concurrent calls).
+- **No lost approvals**: approving is a conditional write (`… WHERE id = ? AND status = 'pending'`); of two simultaneous approvals one wins, the other gets 409 (verified against MariaDB 10.11 and MySQL 8.0 with two concurrent calls).
 - **Audited** (decision 116 via 226): opening and approving each write `tb_admin_audit` — action `state_change`, entity `dual_control_access`, summary `{ action: 'request', accountabilityLogEntryId, legalBasis }` / `{ action: 'approve' }`. A refused attempt writes nothing; the audit follows a successful change, as everywhere in the panel.
 - **The log is not read**: `accountabilityEntryExists` asks only whether the id exists (`SELECT 1`), never for its content.
 - **Pre-round-18 requests are `void`** (decision 225): migration 050 voided every existing row and kept the typed approvers in `legacy_approver_ids` as history only. A void row has no requester, is never approvable, and the API does not expose the legacy column.

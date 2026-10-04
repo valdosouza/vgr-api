@@ -74,6 +74,10 @@ panic/responder-pool, dual-control-access, monetization-config) now use
 
 ## BUSINESS RULES
 - Granting any privilege on a screen implies VIEW (setes rule, kept by name).
+- Editing a user (`PUT /api/users/:id`): an ABSENT `active` or `locale` keeps
+  the saved value, an explicit `locale: null` clears it, and an absent
+  `password` keeps the current one (decision 230; creating still defaults
+  `active` to `S` and `locale` to null).
 - Grant requests are validated against the screen's cataloged privileges (422).
 - Lockout guards: an Admin cannot delete their own account nor revoke their own
   access to the Users screen (no super user exists to recover access).

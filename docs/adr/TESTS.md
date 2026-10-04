@@ -44,4 +44,4 @@ FORBIDDEN: Business logic inside `beforeEach`/`afterEach`.
 ## TROUBLESHOOTING
 - **Flaky tests:** run with `--runInBand` (already the default in the `test` script) to eliminate concurrency between DB tests.
 - **Debug mode:** `node --inspect-brk node_modules/.bin/jest --runInBand <file>`.
-- **Open handles after tests finish:** `npm test -- --detectOpenHandles` (e.g. an unclosed MySQL pool).
+- **Open handles after tests finish:** `npm test -- --detectOpenHandles` (e.g. an unclosed database pool).

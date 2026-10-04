@@ -106,7 +106,7 @@ audited, DEK untouched) — see `docs/feature/report-moderation.md` § B2.
 
 `gateway/scheduler.ts` (first scheduled work in the API, mechanism of
 decision 90): node-cron in-process, never under NODE_ENV=test, started by
-server.ts only after migrations, and single-instance via MySQL
+server.ts only after migrations, and single-instance via MariaDB
 `GET_LOCK` on a dedicated connection (`shared/db/job-lock.ts`).
 
 `media-expiry.job.ts` (hourly): due rows — stamped `expires_at <= NOW()`,

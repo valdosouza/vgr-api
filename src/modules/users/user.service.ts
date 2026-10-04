@@ -50,14 +50,13 @@ export async function updateUser(id: number, input: UserUpdateInput): Promise<Us
     throw new HttpError(409, 'Email already in use', undefined, ErrorCodes.DUPLICATE)
   }
   const passwordHash = input.password ? await bcrypt.hash(input.password, 10) : undefined
-  await repository.updateUser(
-    id,
-    { name: input.name, email: input.email, active: input.active, locale: input.locale },
-    passwordHash
-  )
+  // Decision 230: what the body leaves out stays as saved.
+  const active = input.active ?? before.active
+  const locale = input.locale === undefined ? before.locale : input.locale
+  await repository.updateUser(id, { name: input.name, email: input.email, active, locale }, passwordHash)
   // Session revocation (decision 112): a password set by the admin or a
   // deactivation kills every outstanding session of the target in <=60s.
-  if (passwordHash || (before.active === 'S' && input.active === 'N')) {
+  if (passwordHash || (before.active === 'S' && active === 'N')) {
     await repository.bumpSessionVersion(id)
     invalidateSession(id)
   }

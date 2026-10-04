@@ -1,10 +1,12 @@
 import * as repository from '@modules/users/user.repository'
 import * as store from '@shared/acl/privilege-store'
-import { deleteUser, listUsers, syncUserPrivileges } from '@modules/users/user.service'
+import * as sessionStore from '@shared/acl/session-store'
+import { deleteUser, listUsers, syncUserPrivileges, updateUser } from '@modules/users/user.service'
 import { HttpError } from '@shared/errors/http-error'
 
 jest.mock('@modules/users/user.repository')
 jest.mock('@shared/acl/privilege-store')
+jest.mock('@shared/acl/session-store')
 
 const mockedRepository = repository as jest.Mocked<typeof repository>
 const mockedStore = store as jest.Mocked<typeof store>
@@ -99,5 +101,45 @@ describe('user.service listUsers paging (decision 220)', () => {
 
     expect(mockedRepository.countUsers).toHaveBeenCalledWith('ana')
     expect(mockedRepository.listUsers).toHaveBeenCalledWith('ana', { limit: 10, offset: 10 })
+  })
+})
+
+describe('user.service updateUser — absent fields keep what is saved (decision 230)', () => {
+  const saved = { ...user, active: 'N' as const, locale: 'pt-BR' }
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedRepository.findUserById.mockResolvedValue(saved)
+    mockedRepository.findUserByEmail.mockResolvedValue(saved)
+  })
+
+  it('without active and locale keeps both — a deactivated user stays deactivated', async () => {
+    await updateUser(2, { name: 'Ana Maria', email: 'ana@vgr.com.br' })
+
+    expect(mockedRepository.updateUser).toHaveBeenCalledWith(
+      2,
+      { name: 'Ana Maria', email: 'ana@vgr.com.br', active: 'N', locale: 'pt-BR' },
+      undefined
+    )
+    expect(mockedRepository.bumpSessionVersion).not.toHaveBeenCalled()
+  })
+
+  it('an explicit locale: null clears it; a sent active is applied', async () => {
+    await updateUser(2, { name: 'Ana', email: 'ana@vgr.com.br', active: 'S', locale: null })
+
+    expect(mockedRepository.updateUser).toHaveBeenCalledWith(
+      2,
+      { name: 'Ana', email: 'ana@vgr.com.br', active: 'S', locale: null },
+      undefined
+    )
+  })
+
+  it('deactivating still revokes the sessions (decision 112)', async () => {
+    mockedRepository.findUserById.mockResolvedValue({ ...saved, active: 'S' })
+
+    await updateUser(2, { name: 'Ana', email: 'ana@vgr.com.br', active: 'N' })
+
+    expect(mockedRepository.bumpSessionVersion).toHaveBeenCalledWith(2)
+    expect(sessionStore.invalidateSession).toHaveBeenCalledWith(2)
   })
 })
