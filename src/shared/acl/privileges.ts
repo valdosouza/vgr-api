@@ -43,11 +43,13 @@ export const InterfaceKeys = {
    *  derivatives vs seeing the reporter-reidentifying EXIF original. */
   MEDIA_EVIDENCE: 'media_evidence',
   MEDIA_ORIGINAL: 'media_original',
-  /** kind 'R' resource (decisions 141/142 — migration 032): freezing a
-   *  case's retention; unfreeze approval is dual-controlled in code. */
+  /** kind 'T' screen since migration 034 (a kind 'R' resource from 032
+   *  until then — decisions 141/142): freezing a case's retention;
+   *  unfreeze approval is dual-controlled in code. */
   CASE_FREEZE: 'case_freeze',
-  /** kind 'R' resource (decisions 98/147 — migration 035): judging whether
-   *  a reward's condition was fulfilled and instructing capture/cancel. */
+  /** kind 'T' screen since migration 051 (decision 234; a kind 'R' resource
+   *  from migration 035 until then): judging whether a reward's condition
+   *  was fulfilled and instructing capture/cancel (decisions 98/147). */
   REWARD_MEDIATION: 'reward_mediation',
   /** kind 'T' screen (decisions 165/166 — migration 038): searching
    *  reports and opening a case detail on the panel plane (VIEW; every

@@ -17,6 +17,11 @@ Resources so far:
   different people — and since round 18 they MUST be: the approver is the
   session user and may not be the requester (decisions 223/224). Cataloged with UPDATE only (seeing requests remains
   the screen's VIEW). Bootstrap: screen-UPDATE holders kept approving.
+
+A resource whose panel screen comes to exist moves to kind 'T' in a
+migration of its own, same row and same grants: `case_freeze` (034) and
+`reward_mediation` (051, decision 234).
+
 `GET /api/core/permissions` returns the session user's full grant map
 (T + R) — the app's `SessionAccess` consumes it, falling back to the menu
 tree (default-deny for 'R') when the call fails.
