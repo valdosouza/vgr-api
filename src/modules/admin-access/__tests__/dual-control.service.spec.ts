@@ -2,93 +2,145 @@ import * as repository from '@modules/admin-access/dual-control.repository'
 import {
   createDualControlRequest,
   listDualControlRequests,
-  addApproval,
+  approveDualControlRequest,
 } from '@modules/admin-access/dual-control.service'
+import { DualControlAccessRequestRow } from '@modules/admin-access/dual-control.interface'
 import { HttpError } from '@shared/errors/http-error'
 
 jest.mock('@modules/admin-access/dual-control.repository')
 
 const mockedRepository = repository as jest.Mocked<typeof repository>
 
-describe('dual-control.service', () => {
-  beforeEach(() => {
-    jest.resetAllMocks()
+function requestRow(overrides: Partial<DualControlAccessRequestRow> = {}): DualControlAccessRequestRow {
+  return {
+    id: 1,
+    accountabilityLogEntryId: 99,
+    legalBasis: 'Court order #123',
+    status: 'pending',
+    requestedBy: 7,
+    requestedByName: 'Ana',
+    approvedBy: null,
+    approvedByName: null,
+    approvedAt: null,
+    createdAt: new Date('2026-01-01'),
+    ...overrides,
+  }
+}
+
+async function rejection(promise: Promise<unknown>): Promise<HttpError> {
+  try {
+    await promise
+  } catch (err) {
+    return err as HttpError
+  }
+  throw new Error('expected a rejection')
+}
+
+describe('dual-control.service — request (decisions 223/226)', () => {
+  beforeEach(() => jest.resetAllMocks())
+
+  it('records the session user as requester and answers the stored row with names', async () => {
+    mockedRepository.accountabilityEntryExists.mockResolvedValue(true)
+    mockedRepository.createRequest.mockResolvedValue(1)
+    mockedRepository.findRequestById.mockResolvedValue(requestRow())
+
+    const created = await createDualControlRequest(99, 'Court order #123', 7)
+
+    expect(mockedRepository.createRequest).toHaveBeenCalledWith(99, 'Court order #123', 7)
+    expect(created).toMatchObject({ id: 1, status: 'pending', requestedBy: 7, requestedByName: 'Ana' })
   })
 
-  it('creates a pending request with an empty approverIds set', async () => {
-    mockedRepository.createRequest.mockResolvedValue({
-      id: 1,
-      accountabilityLogEntryId: 99,
-      legalBasis: 'Court order #123',
-      approverIds: [],
-      status: 'pending',
-      createdAt: new Date('2026-01-01'),
-    })
+  it('refuses a request for an accountability entry that does not exist (404)', async () => {
+    mockedRepository.accountabilityEntryExists.mockResolvedValue(false)
 
-    const req = await createDualControlRequest(99, 'Court order #123')
+    const err = await rejection(createDualControlRequest(404, 'Court order #123', 7))
 
-    expect(req.status).toBe('pending')
-    expect(req.approverIds).toEqual([])
-    expect(mockedRepository.createRequest).toHaveBeenCalledWith(99, 'Court order #123')
+    expect(err).toBeInstanceOf(HttpError)
+    expect(err.statusCode).toBe(404)
+    expect(err.code).toBe('NOT_FOUND')
+    expect(mockedRepository.createRequest).not.toHaveBeenCalled()
   })
+})
 
-  it('lists dual-control requests', async () => {
-    mockedRepository.findAllRequests.mockResolvedValue([
-      { id: 1, accountabilityLogEntryId: 99, legalBasis: 'x', approverIds: [], status: 'pending', createdAt: new Date() },
-    ])
+describe('dual-control.service — list (decisions 220/227)', () => {
+  beforeEach(() => jest.resetAllMocks())
 
-    const rows = await listDualControlRequests()
+  it('without page answers the plain list', async () => {
+    mockedRepository.listRequests.mockResolvedValue([requestRow()])
+
+    const rows = await listDualControlRequests({ pageSize: 20 })
 
     expect(rows).toHaveLength(1)
+    expect(mockedRepository.listRequests).toHaveBeenCalledWith(undefined, undefined)
+    expect(mockedRepository.countRequests).not.toHaveBeenCalled()
   })
 
-  it('stays pending after the first approval', async () => {
-    mockedRepository.findRequestById.mockResolvedValue({
-      id: 1,
-      accountabilityLogEntryId: 99,
-      legalBasis: 'Court order #123',
-      approverIds: [],
-      status: 'pending',
-      createdAt: new Date('2026-01-01'),
-    })
-    mockedRepository.persistApproval.mockResolvedValue(undefined)
+  it('with page answers the envelope, filter passed to list and count', async () => {
+    mockedRepository.countRequests.mockResolvedValue(21)
+    mockedRepository.listRequests.mockResolvedValue([requestRow()])
 
-    const req = await addApproval(1, 'admin-a')
+    const result = await listDualControlRequests({ page: 2, pageSize: 20, filter: 'Court' })
 
-    expect(req.status).toBe('pending')
-    expect(req.approverIds).toEqual(['admin-a'])
-    expect(mockedRepository.persistApproval).toHaveBeenCalledWith(1, ['admin-a'], 'pending')
+    expect(result).toEqual({ items: [requestRow()], page: 2, pageSize: 20, total: 21 })
+    expect(mockedRepository.countRequests).toHaveBeenCalledWith('Court')
+    expect(mockedRepository.listRequests).toHaveBeenCalledWith('Court', { limit: 20, offset: 20 })
+  })
+})
+
+describe('dual-control.service — approve (decision 224)', () => {
+  beforeEach(() => jest.resetAllMocks())
+
+  it('grants on ONE approval by a user other than the requester', async () => {
+    mockedRepository.findRequestById
+      .mockResolvedValueOnce(requestRow())
+      .mockResolvedValueOnce(
+        requestRow({ status: 'granted', approvedBy: 8, approvedByName: 'Bia', approvedAt: new Date('2026-01-02') })
+      )
+    mockedRepository.grantRequest.mockResolvedValue(true)
+
+    const granted = await approveDualControlRequest(1, 8)
+
+    expect(mockedRepository.grantRequest).toHaveBeenCalledWith(1, 8)
+    expect(granted).toMatchObject({ status: 'granted', requestedBy: 7, approvedBy: 8, approvedByName: 'Bia' })
   })
 
-  it('grants access only after the second distinct approval (decision 45)', async () => {
-    mockedRepository.findRequestById.mockResolvedValue({
-      id: 1,
-      accountabilityLogEntryId: 99,
-      legalBasis: 'Court order #123',
-      approverIds: ['admin-a'],
-      status: 'pending',
-      createdAt: new Date('2026-01-01'),
-    })
-    mockedRepository.persistApproval.mockResolvedValue(undefined)
+  it('refuses the requester approving their own request (422 BUSINESS_RULE) — one person never grants alone', async () => {
+    mockedRepository.findRequestById.mockResolvedValue(requestRow())
 
-    const req = await addApproval(1, 'admin-b')
+    const err = await rejection(approveDualControlRequest(1, 7))
 
-    expect(req.status).toBe('granted')
-    expect(req.approverIds).toEqual(['admin-a', 'admin-b'])
-    expect(mockedRepository.persistApproval).toHaveBeenCalledWith(1, ['admin-a', 'admin-b'], 'granted')
+    expect(err.statusCode).toBe(422)
+    expect(err.code).toBe('BUSINESS_RULE')
+    expect(mockedRepository.grantRequest).not.toHaveBeenCalled()
   })
 
-  it('rejects a duplicated approverId on the same request (409)', async () => {
-    mockedRepository.findRequestById.mockResolvedValue({
-      id: 1,
-      accountabilityLogEntryId: 99,
-      legalBasis: 'Court order #123',
-      approverIds: ['admin-a'],
-      status: 'pending',
-      createdAt: new Date('2026-01-01'),
-    })
+  it('answers 404 for an unknown request', async () => {
+    mockedRepository.findRequestById.mockResolvedValue(null)
 
-    await expect(addApproval(1, 'admin-a')).rejects.toThrow(HttpError)
-    expect(mockedRepository.persistApproval).not.toHaveBeenCalled()
+    const err = await rejection(approveDualControlRequest(5, 8))
+
+    expect(err.statusCode).toBe(404)
+    expect(err.code).toBe('NOT_FOUND')
+  })
+
+  it.each(['granted', 'void'] as const)('refuses approving a %s request (409, not awaiting approval)', async (status) => {
+    mockedRepository.findRequestById.mockResolvedValue(requestRow({ status, requestedBy: status === 'void' ? null : 7 }))
+
+    const err = await rejection(approveDualControlRequest(1, 8))
+
+    expect(err.statusCode).toBe(409)
+    expect(err.code).toBe('BUSINESS_RULE')
+    expect(mockedRepository.grantRequest).not.toHaveBeenCalled()
+  })
+
+  it('answers 409 to the loser of two simultaneous approvals — the conditional write changed nothing', async () => {
+    mockedRepository.findRequestById.mockResolvedValue(requestRow())
+    mockedRepository.grantRequest.mockResolvedValue(false)
+
+    const err = await rejection(approveDualControlRequest(1, 8))
+
+    expect(err.statusCode).toBe(409)
+    expect(err.code).toBe('BUSINESS_RULE')
+    expect(mockedRepository.findRequestById).toHaveBeenCalledTimes(1)
   })
 })

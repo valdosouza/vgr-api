@@ -34,6 +34,10 @@ function account(id: number) {
   } as any
 }
 
+// Every spec sets the JWT secret it needs (docs/TESTS.md) — this one did
+// not, so it only passed when another suite had set it first.
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret'
+
 const helperToken = () => `Bearer ${signAppAccessToken(8, 1)}`
 
 /** Help offers over HTTP — the contract of decisions 208/211/213: a SET

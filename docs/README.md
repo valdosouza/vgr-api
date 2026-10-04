@@ -17,7 +17,7 @@ Index of project technical documentation for **VGR API**. Use the links below to
 | [**admin-audit.md**](./feature/admin-audit.md) | Append-only trail of who did what on the panel, and its read-only screen endpoints under the `admin_audit` grant (decisions 116, 165, 166). | Optional |
 | [**media.md**](./feature/media.md) | Evidence images: BlobStore, EXIF-stripping re-encode, crypto-shredding (decisions 126-132). | Optional |
 | [**identity.md**](./feature/identity.md) | Role/AnonymityMode model and the append-only accountability log (decisions 4, 6, 23). | Optional |
-| [**dual-control-access.md**](./feature/dual-control-access.md) | Two-distinct-approver gate for decrypting at-risk data (decision 45). | Optional |
+| [**dual-control-access.md**](./feature/dual-control-access.md) | Two-person gate (requester + a different approver, from the session) for decrypting at-risk data (decisions 45, 223–228). | Optional |
 | [**risk-config.md**](./feature/risk-config.md) | RiskTier-per-Category registry, admin-managed (decision 46). | Optional |
 | [**monetization-config.md**](./feature/monetization-config.md) | Fee rule and allowed payment modes per Category (decisions 39, 58). | Optional |
 | [**reports.md**](./feature/reports.md) | App-plane report lifecycle: submit, edit, resolve, visibility, media attach, case freeze (decisions 134-142). | Optional |

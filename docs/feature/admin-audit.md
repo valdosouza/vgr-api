@@ -29,6 +29,7 @@ Called from **controllers**, after a successful mutation. That is deliberate (im
 | `privilege`, `interface`, `system_module` | create · update · delete | respective controllers |
 | `risk_tier`, `category_form`, `fee_rule` | update | respective controllers |
 | `jurisdiction` | state_change | Legal Gate kill switch (decision 107) |
+| `dual_control_access` | state_change | dual-control gate: request opened (`action: 'request'`) and approved (`action: 'approve'`) — decision 226 |
 | evidence media | read | panel views of a reporter's image (decision 130) |
 
 `read` exists only for evidence media: auditing every read of everything would drown the log, but looking at a reporter's photo is exactly the act that must leave a row.

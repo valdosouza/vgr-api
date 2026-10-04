@@ -14,7 +14,8 @@ Resources so far:
   role of the dual-control gate, separate from operating the screen:
   `POST /:id/approvals` stacks `dual_control_access.UPDATE` AND
   `dual_control_approval.UPDATE`, so requesters and approvers can be
-  different people. Cataloged with UPDATE only (seeing requests remains
+  different people — and since round 18 they MUST be: the approver is the
+  session user and may not be the requester (decisions 223/224). Cataloged with UPDATE only (seeing requests remains
   the screen's VIEW). Bootstrap: screen-UPDATE holders kept approving.
 `GET /api/core/permissions` returns the session user's full grant map
 (T + R) — the app's `SessionAccess` consumes it, falling back to the menu
