@@ -295,7 +295,7 @@
 > opening and the approval go to `tb_admin_audit`; a REFUSED attempt is not
 > logged here — logging every decryption attempt belongs to the reveal,
 > which decision 228 left for its own round. Covered by the `[x]` items
-> (`dual-control.repository.spec`, migration 050 verified on MySQL 8.0).
+> (`dual-control.repository.spec`, migration 050 verified on MariaDB 10.11 — the production engine, decision 231 — and MySQL 8.0).
 - [ ] Should append each approval attempt (granted or denied) permanently, including both approver identities on grant
 - [x] Should grant with a conditional write on `status = 'pending'`, so the loser of two simultaneous approvals changes nothing and gets 409 (224)
 - [x] Should store the requester and the approver as user ids and list them by NAME, newest first, never e-mail; a CHECK refuses a granted row approved by its own requester (224/227)
@@ -353,7 +353,7 @@
 > **Amended, 2026-10-04** (round 18, decision 224): the sequence is now
 > request (first authorization) → one approval by another user.
 - [ ] Should execute the full 2-approval sequence → DualControlAccessGranted emitted only after the second distinct approval
-- [x] Should execute request by user A → approval by user B → granted, with A's own approval refused before it (exercised against MySQL 8.0 in DC1; unit coverage in `dual-control.service.spec`)
+- [x] Should execute request by user A → approval by user B → granted, with A's own approval refused before it (exercised against MariaDB 10.11 and MySQL 8.0 in DC1; unit coverage in `dual-control.service.spec`)
 
 **AdminLogin → AdminAccountRepository** (amendment, task 33, decision 67)
 - [ ] Should execute AdminLogin → credentials verified against AdminAccountRepository → JWT issued with role=admin
@@ -480,6 +480,7 @@
   - Then: the Reporter's response shows H's message under a `participantToken`, never H's raw account id; H's `displayName` only when H chose it and the tier is not high (170)
 
 - [x] Should paginate the growing panel lists only when asked — `GET /api/privileges`, `/api/interfaces`, `/api/system-modules`, `/api/users`, `/api/legal-policy/{jurisdictions,capabilities,rules}` and `/api/panic/responder-pool` keep their plain `data: T[]` shape without `page`, answer `data: { items, page, pageSize, total }` with `page` (`pageSize` 1..100, default 20, `filter` trimmed max 100 with LIKE on the natural text columns; the responder pool has no filter — no applicant name is joined), and answer 422 `VALIDATION_FAILED` for `pageSize=1000`; fixed catalogs (risk-config, category-forms, monetization-config) stay un-paginated (amended 2026-09-21, PS0 decision 220 — `paged-query.spec`, `privilege.routes.spec`, `interface.routes.spec`, `system-module.routes.spec`, `user.routes.spec`, `legal-policy.routes.spec`, `responder-pool.controller.spec`, plus the `*.list.spec` SQL contracts)
+- [x] Should keep a user's saved `active` and `locale` when `PUT /api/users/:id` leaves them out — a deactivated user is never reactivated by omission — clear `locale` on an explicit `null`, and still default them on create (amended 2026-10-04, decision 230 — `user.service.spec`, `user.routes.spec`)
 
 ### 3.2 Alternative and Error Flows
 

@@ -5,7 +5,7 @@ Modular Express/TypeScript API, mirroring the `setes-api` structure
 (`D:\Gestao2027\setes-api`) by explicit product-owner decision. Each business
 domain ("cadastro") is a module with 6 fixed files, symmetric to the
 equivalent module in the Flutter app at `D:\ProjetoVGR\app`. Flow: routes →
-controller → service → repository → MySQL.
+controller → service → repository → MariaDB.
 
 ## FOLDER STRUCTURE
 <folder_structure>
@@ -23,7 +23,7 @@ D:\ProjetoVGR\api/
 │   │   └── sql/            # One numbered file per schema change
 │   ├── shared/
 │   │   ├── acl/                 # Privilege/InterfaceKey constants + cached per-user grant lookup
-│   │   ├── db/connection.ts     # MySQL pool (decimalNumbers:true — NEVER remove)
+│   │   ├── db/connection.ts     # MariaDB pool, mysql2 driver (decimalNumbers:true — NEVER remove)
 │   │   ├── errors/http-error.ts # Custom HTTP error class
 │   │   ├── errors/error-codes.ts # Catalog of known error codes
 │   │   ├── http/controller-utils.ts # handleError + parseId + parseBody (every controller uses these)
@@ -45,7 +45,7 @@ D:\ProjetoVGR\api/
 |--------|-----------------|-------------|
 | gateway | JWT auth, rate limiting, route registration | `src/gateway/` |
 | modules/* | One business domain per folder (report, help offer, reward — to be defined by `scope-refinement`) | `src/modules/<module>/` |
-| migrations | MySQL schema versioning | `src/migrations/` |
+| migrations | MariaDB schema versioning — validated on MariaDB (10.11); MariaDB syntax such as `DROP … IF EXISTS` is allowed, MySQL compatibility is not a requirement (decision 231) | `src/migrations/` |
 | shared | DB, errors, logger, types | `src/shared/` |
 
 ## PATTERNS
@@ -86,7 +86,7 @@ REQUIRED: API error messages are English-only PERMANENTLY (decision 80) — the 
 ## INTEGRATIONS
 | External Service / Component | Purpose | Connection / Authentication Method |
 |------------------------------|---------|-------------------------------------|
-| MySQL | Persistence (`tb_` prefix, soft delete `deleted='S'/'N'`) | `mysql2/promise`, pool via `shared/db/connection.ts` |
+| MariaDB (production engine, decision 231) | Persistence (`tb_` prefix, soft delete `deleted='S'/'N'`) | `mysql2/promise` (MariaDB speaks the MySQL protocol), pool via `shared/db/connection.ts` |
 | vgr-app (`D:\ProjetoVGR\app`) | Flutter client | JWT Bearer via `gateway/auth.middleware.ts` |
 
 **Multi-tenancy: decided — single schema** (decision 68 in VGR-plano.md).

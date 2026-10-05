@@ -17,6 +17,11 @@ Resources so far:
   different people — and since round 18 they MUST be: the approver is the
   session user and may not be the requester (decisions 223/224). Cataloged with UPDATE only (seeing requests remains
   the screen's VIEW). Bootstrap: screen-UPDATE holders kept approving.
+
+A resource whose panel screen comes to exist moves to kind 'T' in a
+migration of its own, same row and same grants: `case_freeze` (034) and
+`reward_mediation` (051, decision 234).
+
 `GET /api/core/permissions` returns the session user's full grant map
 (T + R) — the app's `SessionAccess` consumes it, falling back to the menu
 tree (default-deny for 'R') when the call fails.
@@ -74,6 +79,10 @@ panic/responder-pool, dual-control-access, monetization-config) now use
 
 ## BUSINESS RULES
 - Granting any privilege on a screen implies VIEW (setes rule, kept by name).
+- Editing a user (`PUT /api/users/:id`): an ABSENT `active` or `locale` keeps
+  the saved value, an explicit `locale: null` clears it, and an absent
+  `password` keeps the current one (decision 230; creating still defaults
+  `active` to `S` and `locale` to null).
 - Grant requests are validated against the screen's cataloged privileges (422).
 - Lockout guards: an Admin cannot delete their own account nor revoke their own
   access to the Users screen (no super user exists to recover access).

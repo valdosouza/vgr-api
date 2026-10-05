@@ -23,7 +23,14 @@ src/migrations/sql/035_reward.sql   # tb_reward_offer, tb_reward_recipient,
 src/migrations/sql/036_reward_mediation.sql  # tb_mediation_criteria, tb_reward_resolution,
                                              # tb_reward_contest, tb_reward_mediation_log,
                                              # tb_reward_offer.criteria_version
+src/migrations/sql/051_reward_mediation_menu.sql  # reward_mediation kind 'R' -> 'T' (decision 234)
 ```
+
+`reward_mediation` was cataloged in 035 as a kind 'R' resource, off the
+menu; the panel screen then opened only by URL. Since migration 051
+(decision 234, browser test of 2026-10-04) it is a kind 'T' screen in
+Operations, after Monetization Config — the same move migration 034 made
+for `case_freeze`. Grants and guards are unchanged.
 
 Mounted at `/app-reward` (app.ts, behind `appAuthMiddleware` — every route needs an identified account, decisions 60/82 govern disclosure to OTHER parties, not the payer's own PSP KYC) and `/api/reward-mediation` (gateway/router.ts, behind `requirePrivilege(REWARD_MEDIATION, UPDATE)`).
 

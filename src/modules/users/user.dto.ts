@@ -8,24 +8,28 @@ export const userListQueryDto = pagedQueryDto
 const baseUser = {
   name: z.string().min(2).max(120),
   email: z.string().email().max(255),
-  active: z.enum(['S', 'N']).default('S'),
-  locale: z
-    .string()
-    .max(10)
-    .nullish()
-    .transform((v) => v ?? null),
 }
+
+const active = z.enum(['S', 'N'])
+const locale = z.string().max(10)
 
 export const userCreateDto = z.object({
   ...baseUser,
+  active: active.default('S'),
+  locale: locale.nullish().transform((v) => v ?? null),
   // Admin sets the initial password (decision 75 — no e-mail invitation in
   // the MVP). Policy from decision 114; existing passwords stay valid
   // until the next change.
   password: newPasswordSchema,
 })
 
+/** Decision 230: on an update an ABSENT field keeps what is saved —
+ *  `active` (a default here used to reactivate a deactivated user) and
+ *  `locale` (it used to be nulled); an explicit `locale: null` clears it. */
 export const userUpdateDto = z.object({
   ...baseUser,
+  active: active.optional(),
+  locale: locale.nullable().optional(),
   // Absent = keep the current password (setes users PUT semantics).
   password: newPasswordSchema.optional(),
 })

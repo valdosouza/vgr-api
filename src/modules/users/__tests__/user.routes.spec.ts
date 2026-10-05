@@ -6,6 +6,7 @@ import * as aclStore from '@shared/acl/privilege-store'
 
 jest.mock('@modules/users/user.service')
 jest.mock('@shared/acl/privilege-store')
+jest.mock('@shared/audit/admin-audit')
 jest.mock('@shared/acl/session-store', () => ({
   getSessionInfo: async () => ({ sessionVersion: 1, active: true }),
   invalidateSession: () => undefined,
@@ -72,5 +73,51 @@ describe('GET /api/users — paging (decision 220)', () => {
     await request(app).get('/api/users?filter=%20ana%20').set('Authorization', `Bearer ${token()}`)
 
     expect(mockedService.listUsers).toHaveBeenCalledWith(expect.objectContaining({ filter: 'ana' }))
+  })
+})
+
+/** PUT /api/users/:id under decision 230: what the body leaves out is not
+ *  invented by the DTO — the service keeps the saved value. */
+describe('PUT /api/users/:id — absent active/locale are not defaulted (decision 230)', () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = 'test-secret'
+  })
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+    mockedAcl.userHasPrivilege.mockResolvedValue(true)
+    mockedService.updateUser.mockResolvedValue(rows[0])
+  })
+
+  it('a body without active and locale reaches the service without them', async () => {
+    const res = await request(app)
+      .put('/api/users/2')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ name: 'Ana', email: 'ana@vgr.com.br' })
+
+    expect(res.status).toBe(200)
+    expect(mockedService.updateUser).toHaveBeenCalledWith(2, { name: 'Ana', email: 'ana@vgr.com.br' })
+  })
+
+  it('an explicit locale: null is passed on (it clears)', async () => {
+    await request(app)
+      .put('/api/users/2')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ name: 'Ana', email: 'ana@vgr.com.br', locale: null })
+
+    expect(mockedService.updateUser).toHaveBeenCalledWith(2, { name: 'Ana', email: 'ana@vgr.com.br', locale: null })
+  })
+
+  it('creating still defaults active to S and locale to null', async () => {
+    mockedService.createUser.mockResolvedValue(rows[0])
+
+    await request(app)
+      .post('/api/users')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ name: 'Ana', email: 'ana@vgr.com.br', password: 'Correct-Horse-Battery-9' })
+
+    expect(mockedService.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({ active: 'S', locale: null })
+    )
   })
 })
