@@ -17,8 +17,9 @@ export interface HelpOfferRow {
 export interface SubmitHelpOfferInput {
   reportId: number
   helpTypes: HelpType[]
-  /** Decision 6/34: identification is the HELPER's choice; a logged-in
-   *  helper may still offer anonymously. */
+  /** Decisions 6/34/237: identification is the HELPER's explicit choice
+   *  and hidden is the default; a hidden offer with an account behind it
+   *  can still be claimed for a reward (60). */
   anonymous: boolean
 }
 

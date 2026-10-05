@@ -159,6 +159,19 @@ gets `help_offer_updated { helpTypes }` (212). Registered, out of scope:
 an anonymous offer on one's own report is accepted (20 only sees
 accounts).
 
+**Hidden by default (H1, 2026-10-05 — decisions 237/238).** The
+helper's name reaches the reporter ONLY when the helper explicitly sends
+`anonymous: false`: an ABSENT `anonymous` on `POST /app-help-offers` is
+now hidden (it used to mean identified, so a logged-in helper was named
+without ever choosing — the 170 choice had never been built). A request
+without a session is hidden whatever it sends (35). The name is still
+cut on `high` tier even when the helper chose it (40/60/238): the owner
+view's `helperDisplayName` is null when `anonymous` OR tier `high`, and
+the chat mask follows the offer (170). Hidden is social, not forensic:
+`helper_account_id` is kept, so a hidden offer WITH an account is still
+ratable (180) and can still receive a reward (60 — `reward.service`
+keys on the account, never on the flag).
+
 **HT1 addendum (2026-09-19, for decision 211's mobile affordance).** The
 `participant` view of `GET /app-reports/:id` now carries
 `myOffer: { helpOfferId, helpTypes }` — the viewer's OWN identified offer

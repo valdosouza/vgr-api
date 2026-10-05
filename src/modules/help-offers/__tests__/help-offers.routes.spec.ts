@@ -78,6 +78,30 @@ describe('help-offers routes (decisions 10/20/34/35, 208-214)', () => {
       expect(mockedRepository.insertHelpOffer).not.toHaveBeenCalled()
     })
 
+    it('a logged-in helper who sends no choice stays hidden (237)', async () => {
+      const res = await request(app)
+        .post('/app-help-offers')
+        .set('Authorization', helperToken())
+        .send({ reportId: 7, helpTypes: ['share'] })
+
+      expect(res.status).toBe(201)
+      expect(mockedRepository.insertHelpOffer).toHaveBeenCalledWith(
+        expect.objectContaining({ helperAccountId: 8, anonymous: true })
+      )
+    })
+
+    it('a logged-in helper is named only when they choose it (237)', async () => {
+      const res = await request(app)
+        .post('/app-help-offers')
+        .set('Authorization', helperToken())
+        .send({ reportId: 7, helpTypes: ['share'], anonymous: false })
+
+      expect(res.status).toBe(201)
+      expect(mockedRepository.insertHelpOffer).toHaveBeenCalledWith(
+        expect.objectContaining({ helperAccountId: 8, anonymous: false })
+      )
+    })
+
     it('the singular helpType of the old contract is gone (213)', async () => {
       const res = await request(app)
         .post('/app-help-offers')
