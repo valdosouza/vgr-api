@@ -29,10 +29,15 @@ D:\ProjetoVGR\api/
 │   │   ├── http/controller-utils.ts # handleError + parseId + parseBody (every controller uses these)
 │   │   ├── logger/logger.ts     # Simple timestamped logger
 │   │   └── types/express.d.ts   # req.user type augmentation
+│   ├── cli/
+│   │   ├── run-migrations.ts # CLI to run migrations manually
+│   │   └── seed-admin.ts     # First panel account bootstrap (decision 70)
 │   ├── app.ts              # Express app configuration
 │   └── server.ts           # Server bootstrap
-└── scripts/
-    └── run-migrations.ts   # CLI to run migrations manually
+├── scripts/                # Build helpers in plain Node (not compiled)
+│   ├── copy-migrations.js  # Copies src/migrations/sql into dist/ after tsc
+│   └── verify-build.js     # Smoke test of dist/ (CI) — see RELEASE.md
+└── tsconfig.build.json     # Production build: src/ without __tests__
 </folder_structure>
 
 ## LAYERS

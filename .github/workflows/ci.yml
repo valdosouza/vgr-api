@@ -27,3 +27,14 @@ jobs:
       # spec sets the JWT secret it needs (docs/TESTS.md). No database here.
       - name: Test
         run: npm test -- --ci
+
+      # The production build must load with plain Node and ship every
+      # migration (plano-producao.md B1/B2): the old build compiled fine and
+      # crashed on start, or would have booted over an empty database.
+      - name: Production build
+        run: npm run build && npm run verify:build
+
+      # Release gate of decision 118 (docs/adr/RELEASE.md): no HIGH or
+      # CRITICAL advisory in what production installs.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high

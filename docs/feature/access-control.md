@@ -35,7 +35,7 @@ mirroring the setes design minus its institution layer: **user × interface
 - Everything ships in the package; visibility/action is decided only by user
   grants (decision 69) — there is no per-interface licensing.
 - No super user (decision 70): the Admin is a `tb_user` holding grants on the
-  administration screens; bootstrap via `scripts/seed-admin.ts`.
+  administration screens; bootstrap via `src/cli/seed-admin.ts`.
 - **The API enforces privileges on every endpoint** (decision 72) — conscious
   divergence from setes-api, where grants only filter the menu.
 
