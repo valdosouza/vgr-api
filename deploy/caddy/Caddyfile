@@ -1,0 +1,46 @@
+# TLS for every host name comes from Let's Encrypt automatically (decision
+# 241). Host names: deploy/.env.
+
+{
+	email {$ACME_EMAIL}
+}
+
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}
+
+# The panel is a Flutter web build (docs/feature/release.md in vgr-app),
+# copied to /srv/vgr/panel/<env> on the server. The entry files are never
+# cached, so a new build takes effect on the next load.
+(panel) {
+	import security
+	try_files {path} /index.html
+	file_server
+	@entry path / /index.html /flutter_bootstrap.js /flutter_service_worker.js /version.json
+	header @entry Cache-Control "no-cache"
+}
+
+{$API_HOST} {
+	import security
+	reverse_proxy api:3000
+}
+
+{$API_HOMOLOG_HOST} {
+	import security
+	reverse_proxy api-homolog:3000
+}
+
+{$PANEL_HOST} {
+	root * /srv/panel/prod
+	import panel
+}
+
+{$PANEL_HOMOLOG_HOST} {
+	root * /srv/panel/homolog
+	import panel
+}

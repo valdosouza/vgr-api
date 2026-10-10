@@ -1,0 +1,131 @@
+# VGR — one server, two environments (decisions 240-242, 249).
+#
+#   caddy        TLS + reverse proxy + the panel's static files (only
+#                service with published ports: 80/443)
+#   api          production API      — image vgr-api:prod
+#   api-homolog  staging API         — built from this repository
+#   mariadb      one server, two databases (vgr, vgr_homolog), one user each
+#   garage       S3-compatible storage, two buckets, one key per environment
+#
+# Secrets live in $VGR_SECRETS_DIR (default /etc/vgr), outside the
+# repository, readable by root only (decision 243). Non-secret settings
+# (host names, e-mail for the certificates) come from deploy/.env.
+# Step by step: docs/adr/DEPLOY.md.
+
+name: vgr
+
+x-logging: &logging
+  # Container logs go to journald, which keeps 14 days (decision 245,
+  # deploy/journald/vgr.conf).
+  driver: journald
+  options:
+    tag: "vgr/{{.Name}}"
+
+services:
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/.env}
+      API_HOST: ${API_HOST:?set API_HOST in deploy/.env}
+      PANEL_HOST: ${PANEL_HOST:?set PANEL_HOST in deploy/.env}
+      API_HOMOLOG_HOST: ${API_HOMOLOG_HOST:?set API_HOMOLOG_HOST in deploy/.env}
+      PANEL_HOMOLOG_HOST: ${PANEL_HOMOLOG_HOST:?set PANEL_HOMOLOG_HOST in deploy/.env}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${PANEL_ROOT:-/srv/vgr/panel}:/srv/panel:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - api-homolog
+    networks: [edge]
+    logging: *logging
+
+  api:
+    # Built here and promoted from staging (DEPLOY.md §10) — never pulled.
+    image: vgr-api:prod
+    pull_policy: never
+    restart: unless-stopped
+    env_file: ${VGR_SECRETS_DIR:-/etc/vgr}/api-prod.env
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      garage:
+        condition: service_started
+    # edge: SMTP and Google token checks need the internet; backend: the
+    # database and the object store.
+    networks: [edge, backend]
+    logging: *logging
+
+  api-homolog:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: vgr-api:homolog
+    pull_policy: never
+    restart: unless-stopped
+    env_file: ${VGR_SECRETS_DIR:-/etc/vgr}/api-homolog.env
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      garage:
+        condition: service_started
+    networks: [edge, backend]
+    logging: *logging
+
+  mariadb:
+    image: mariadb:10.11
+    restart: unless-stopped
+    env_file: ${VGR_SECRETS_DIR:-/etc/vgr}/mariadb.env
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      # Runs once, on an empty data directory: both databases and users.
+      - ./mariadb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [backend]
+    logging: *logging
+
+  garage:
+    image: dxflrs/garage:v2.1.0
+    restart: unless-stopped
+    env_file: ${VGR_SECRETS_DIR:-/etc/vgr}/garage.env
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    networks: [backend]
+    logging: *logging
+
+  # Backup tool (decision 244), run by deploy/backup/backup.sh — never up.
+  # On both networks: it reads Garage (backend) and writes off the server
+  # (edge).
+  rclone:
+    image: rclone/rclone:1.71
+    profiles: ["tools"]
+    volumes:
+      - ${VGR_SECRETS_DIR:-/etc/vgr}/rclone.conf:/config/rclone/rclone.conf:ro
+      - ${BACKUP_DIR:-/var/backups/vgr}:/backups
+    networks: [backend, edge]
+
+networks:
+  edge: {}
+  # No route out: the database and the object store never reach the
+  # internet and the internet never reaches them.
+  backend:
+    internal: true
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+  mariadb_data: {}
+  garage_meta: {}
+  garage_data: {}

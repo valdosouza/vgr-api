@@ -47,6 +47,10 @@ The runner refuses to start when it finds no migration file (absent or
 empty `dist/migrations/sql`): an install that lost them must fail, never
 report "Migrations completed" over an empty database.
 
+In the server these run inside the API image (`Dockerfile`, decision 241):
+the build stage runs `npm run build && npm run verify:build`, the runtime
+stage has production dependencies only. Deployment steps: `DEPLOY.md`.
+
 Development keeps the TypeScript entry points: `npm run dev`,
 `npm run db:migrate`, `npm run seed:admin -- <email> <password>`.
 

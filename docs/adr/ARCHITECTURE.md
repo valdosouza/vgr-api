@@ -37,6 +37,8 @@ D:\ProjetoVGR\api/
 ├── scripts/                # Build helpers in plain Node (not compiled)
 │   ├── copy-migrations.js  # Copies src/migrations/sql into dist/ after tsc
 │   └── verify-build.js     # Smoke test of dist/ (CI) — see RELEASE.md
+├── deploy/                 # Single-server deployment kit (DEPLOY.md): compose, Caddy, MariaDB init, Garage, backup, systemd, journald
+├── Dockerfile              # API image: build stage + production-only runtime
 └── tsconfig.build.json     # Production build: src/ without __tests__
 </folder_structure>
 
