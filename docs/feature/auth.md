@@ -1,7 +1,7 @@
 # Auth (admin login)
 
 ## OVERVIEW
-Email/password login for `apps/admin` (decision 67) — separate from decision 31's Google/Apple/Facebook/OTP providers, which are for end users on `apps/mobile` and don't fit an internal panel. Since migration 019 the account table is `tb_user` (decision 74 — `tb_admin_account` evolved into the team user): login also requires `active='S'`/`deleted='N'` (same generic 401 either way) and stamps `last_login_at`. What the JWT holder can do is decided per privilege by `requirePrivilege` (see [access-control.md](./access-control.md)), never by the `role` claim. Everyday account creation happens on the Users screen (decision 75); `scripts/seed-admin.ts` remains only as first-account bootstrap (it also grants every cataloged privilege — decision 70).
+Email/password login for `apps/admin` (decision 67) — separate from decision 31's Google/Apple/Facebook/OTP providers, which are for end users on `apps/mobile` and don't fit an internal panel. Since migration 019 the account table is `tb_user` (decision 74 — `tb_admin_account` evolved into the team user): login also requires `active='S'`/`deleted='N'` (same generic 401 either way) and stamps `last_login_at`. What the JWT holder can do is decided per privilege by `requirePrivilege` (see [access-control.md](./access-control.md)), never by the `role` claim. Everyday account creation happens on the Users screen (decision 75); `src/cli/seed-admin.ts` remains only as first-account bootstrap (it also grants every cataloged privilege — decision 70).
 
 ## STRUCTURE
 ```
@@ -21,7 +21,7 @@ src/shared/security/login-delay.ts   # progressive per-account delay (decision 1
 src/shared/security/totp.ts          # RFC 6238, no external dependency
 src/shared/auth/audience.ts          # aud: 'admin' vs 'app' (decision 119)
 
-scripts/seed-admin.ts            # tsx scripts/seed-admin.ts <email> <password> — bcrypt-hashes, upserts
+src/cli/seed-admin.ts            # npm run seed:admin -- <email> <password> (built: seed:admin:prod) — bcrypt-hashes, upserts
 ```
 
 Mounted at `/auth/admin-login` in `src/app.ts` — deliberately **outside** `/api` and registered *before* `authMiddleware`, since this is how a JWT is obtained in the first place (mirrors the not-yet-built `/auth/login` for end-user OAuth/OTP).

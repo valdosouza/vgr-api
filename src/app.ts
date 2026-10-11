@@ -23,6 +23,7 @@ import responderPoolAppRoutes from '@modules/panic/responder-pool-app.routes'
 import panicAlertRoutes from '@modules/panic/panic-alert.routes'
 import { allowedOrigins } from '@shared/config/env'
 import logger from '@shared/logger/logger'
+import { pingDatabase } from '@shared/db/health'
 
 const app = express()
 
@@ -92,13 +93,18 @@ if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'tr
  * @swagger
  * /health:
  *   get:
- *     summary: Health Check
+ *     summary: Health check for the external monitor (decision 245) — includes the database
  *     security: []
  *     responses:
  *       200:
- *         description: API is healthy
+ *         description: API and database are up
+ *       503:
+ *         description: The database does not answer
  */
-app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOString() }))
+app.get('/health', async (_, res) => {
+  const up = await pingDatabase()
+  res.status(up ? 200 : 503).json({ status: up ? 'ok' : 'unavailable', ts: new Date().toISOString() })
+})
 
 // Public — issues the JWT itself, so it must run before authMiddleware
 // (decision 67). Rate-limited harder than /api: brute-force target.

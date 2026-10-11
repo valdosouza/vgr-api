@@ -1,5 +1,5 @@
-import { runMigrations } from '../src/migrations/runner'
-import logger from '../src/shared/logger/logger'
+import { runMigrations } from '../migrations/runner'
+import logger from '@shared/logger/logger'
 
 runMigrations()
   .then(() => {

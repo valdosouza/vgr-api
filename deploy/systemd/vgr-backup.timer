@@ -1,0 +1,13 @@
+# /etc/systemd/system/vgr-backup.timer — every day at 03:30 in Brasília
+# (06:30 UTC). Persistent: a run missed while the server was off happens at
+# the next boot.
+[Unit]
+Description=VGR daily backup
+
+[Timer]
+OnCalendar=*-*-* 06:30:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

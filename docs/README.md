@@ -9,6 +9,7 @@ Index of project technical documentation for **VGR API**. Use the links below to
 |----------|-------------|----------|
 | [**ARCHITECTURE.md**](./adr/ARCHITECTURE.md) | Architecture, folder organization, and code patterns for the project. | **Mandatory** |
 | [**TESTS.md**](./adr/TESTS.md) | Testing strategies, patterns, and execution commands. | **Mandatory** |
+| [**DEPLOY.md**](./adr/DEPLOY.md) | Runbook of the single-server deployment: Docker Compose (Caddy, MariaDB, Garage, production + staging APIs), secrets, first start, backups and restore test, monitoring, updates (decisions 240-249). | **Mandatory before deploy** |
 | [**RELEASE.md**](./adr/RELEASE.md) | Release checklist and the env vars production refuses to boot without (decisions 110-118). | **Mandatory before deploy** |
 | [**access-control.md**](./feature/access-control.md) | Per-user permission model, dynamic menu and per-endpoint enforcement (decisions 68-75). | Optional |
 | [**auth.md**](./feature/auth.md) | Panel login: revocable 15min sessions, progressive delay, mandatory TOTP 2FA (decisions 67, 112-114). | Optional |

@@ -1,6 +1,9 @@
 import request from 'supertest'
 import app from '../../app'
 
+// /health pings the database (decision 245); this suite is about CORS.
+jest.mock('@shared/db/health', () => ({ pingDatabase: async () => true }))
+
 /**
  * CORS contract for the web targets (decision 115; platform priority
  * "Web + Android first"). Found by the first manual end-to-end run on

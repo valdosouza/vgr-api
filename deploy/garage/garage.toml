@@ -1,0 +1,26 @@
+# Garage — the S3-compatible object store of the MVP (decision 249, which
+# replaces MinIO in decision 126). One node, on the same server as the API
+# (decision 240): replication 1, no other node to talk to. The secrets
+# (GARAGE_RPC_SECRET, GARAGE_ADMIN_TOKEN) come from garage.env, never from
+# this file. Ports 3900 (S3) and 3903 (admin) are reachable only on the
+# internal compose network.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+metadata_auto_snapshot_interval = "6h"
+
+replication_factor = 1
+
+# IPv4 inside the compose network: it works whether or not the host has
+# IPv6, and nothing outside the network talks to Garage.
+
+rpc_bind_addr = "0.0.0.0:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "0.0.0.0:3900"
+
+[admin]
+api_bind_addr = "0.0.0.0:3903"

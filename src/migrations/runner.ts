@@ -6,6 +6,23 @@ import logger from '@shared/logger/logger'
 const SQL_DIR = path.join(__dirname, 'sql')
 
 /**
+ * The migration files, in order. Refuses an absent or empty folder: the
+ * build once shipped without the `.sql` files and the runner, finding
+ * nothing, reported success over an empty database (plano-producao.md B2).
+ * There is always at least one migration, so none found is a broken
+ * install — never "nothing to do".
+ */
+export function listMigrationFiles(dir: string = SQL_DIR): string[] {
+  const files = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
+    : []
+  if (files.length === 0) {
+    throw new Error(`No migration files found in ${dir} — refusing to start with an unknown schema`)
+  }
+  return files
+}
+
+/**
  * Single-schema migration runner (VGR hasn't decided on per-institution
  * multi-tenancy yet — if it does, mirror `runMigrationsForAllInstitutions`
  * from setes-api, iterating one schema per tenant).
@@ -14,6 +31,7 @@ const SQL_DIR = path.join(__dirname, 'sql')
  * tracked in the `_migrations` table.
  */
 export async function runMigrations(): Promise<void> {
+  const files = listMigrationFiles()
   const conn = await pool.getConnection()
   try {
     await conn.query(`
@@ -26,10 +44,6 @@ export async function runMigrations(): Promise<void> {
 
     const [rows] = await conn.query<any[]>('SELECT version FROM _migrations')
     const applied = new Set(rows.map((r) => r.version))
-
-    const files = fs.existsSync(SQL_DIR)
-      ? fs.readdirSync(SQL_DIR).filter((f) => f.endsWith('.sql')).sort()
-      : []
 
     for (const file of files) {
       const version = Number(file.split('_')[0])

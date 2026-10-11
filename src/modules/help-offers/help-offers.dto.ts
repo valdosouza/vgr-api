@@ -13,8 +13,10 @@ export const helpTypesDto = z
 export const submitHelpOfferDto = z.object({
   reportId: z.number().int().positive(),
   helpTypes: helpTypesDto,
-  /** Identification is the helper's choice (decision 6). */
-  anonymous: z.boolean().default(false),
+  /** Identification is the helper's EXPLICIT choice (decisions 6/237):
+   *  absent = hidden, so a client that never asks keeps the helper
+   *  private. High tier masks the name even when sent false (40/60/238). */
+  anonymous: z.boolean().default(true),
 })
 
 /** PUT /app-help-offers/:id/types (decision 211). */

@@ -1,0 +1,10 @@
+# /etc/systemd/system/vgr-backup.service — decision 244.
+[Unit]
+Description=VGR daily backup (encrypted dumps + media mirror, off the server)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/vgr/vgr-api/deploy
+ExecStart=/opt/vgr/vgr-api/deploy/backup/backup.sh
